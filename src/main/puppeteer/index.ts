@@ -8,13 +8,13 @@ let isRunning = false;
 let puppeteerBrowser: Browser;
 let puppeteerPage: Page;
 
-function getAppRoot() {
-  if (process.platform === 'win32') {
-    return path.join(app.getAppPath(), '/../../../');
-  } else {
-    return path.join(app.getAppPath(), '/../');
-  }
-}
+// function getAppRoot() {
+//   if (process.platform === 'win32') {
+//     return path.join(app.getAppPath(), '/../../../');
+//   } else {
+//     return path.join(app.getAppPath(), '/../');
+//   }
+// }
 
 const ACTION_TIMEOUT = 1000;
 
