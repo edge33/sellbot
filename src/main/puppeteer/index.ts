@@ -40,7 +40,7 @@ const withRunningCheck = <T extends unknown[]>(
   };
 };
 const handleAuth = withRunningCheck(async (callback: () => void, webContents: WebContents) => {
-  const CHROMIUM_PATH = path.join(getAppRoot(), 'ungoogled-chromium', 'chrome');
+  const CHROMIUM_PATH = path.join(getAppRoot(), 'ungoogled-chromium', 'chrome.exe');
   console.log({ CHROMIUM_PATH });
 
   puppeteerBrowser = await puppeteer.launch({
@@ -92,7 +92,7 @@ const getAndStoreCookies = async () => {
 
 const insertItem = withRunningCheck(
   async (callback: () => void, webContents: WebContents, itemPath: string) => {
-    const CHROMIUM_PATH = path.join(getAppRoot(), 'ungoogled-chromium', 'chrome');
+    const CHROMIUM_PATH = path.join(getAppRoot(), 'ungoogled-chromium', 'chrome.exe');
     console.log({ CHROMIUM_PATH });
 
     puppeteerBrowser = await puppeteer.launch({
