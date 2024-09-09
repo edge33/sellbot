@@ -8,13 +8,13 @@ let isRunning = false;
 let puppeteerBrowser: Browser;
 let puppeteerPage: Page;
 
-// function getAppRoot() {
-//   if (process.platform === 'win32') {
-//     return path.join(app.getAppPath(), '/../../../');
-//   } else {
-//     return path.join(app.getAppPath(), '/../');
-//   }
-// }
+function getAppRoot() {
+  if (process.platform === 'win32') {
+    return path.join(app.getAppPath(), '/../../');
+  } else {
+    return path.join(app.getAppPath(), '/../');
+  }
+}
 
 const ACTION_TIMEOUT = 1000;
 
@@ -40,7 +40,7 @@ const withRunningCheck = <T extends unknown[]>(
   };
 };
 const handleAuth = withRunningCheck(async (callback: () => void, webContents: WebContents) => {
-  const CHROMIUM_PATH = path.join(app.getAppPath(), 'ungoogled-chromium', 'chrome');
+  const CHROMIUM_PATH = path.join(getAppRoot(), 'ungoogled-chromium', 'chrome');
   console.log({ CHROMIUM_PATH });
 
   puppeteerBrowser = await puppeteer.launch({
@@ -92,7 +92,7 @@ const getAndStoreCookies = async () => {
 
 const insertItem = withRunningCheck(
   async (callback: () => void, webContents: WebContents, itemPath: string) => {
-    const CHROMIUM_PATH = path.join(app.getAppPath(), 'ungoogled-chromium', 'chrome');
+    const CHROMIUM_PATH = path.join(getAppRoot(), 'ungoogled-chromium', 'chrome');
     console.log({ CHROMIUM_PATH });
 
     puppeteerBrowser = await puppeteer.launch({
