@@ -1,5 +1,5 @@
 import {
-  createBrowserRouter,
+  createHashRouter,
   createRoutesFromElements,
   replace,
   Route,
@@ -15,7 +15,7 @@ import DefaultLayout from './ui/layout/DefaultLayout';
 function App() {
   const { loading, itemsPath, cookiesStored } = useSettingsContext();
 
-  const router = createBrowserRouter(
+  const router = createHashRouter(
     createRoutesFromElements(
       <Route path="/" element={<DefaultLayout />}>
         <>
