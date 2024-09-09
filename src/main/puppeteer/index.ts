@@ -2,6 +2,7 @@ import { WebContents } from 'electron';
 import puppeteer, { Browser, ElementHandle, Page } from 'puppeteer-core';
 import { getSettings, storeCookies } from '../settings';
 import { getItem } from '../items';
+import path from 'path';
 
 let isRunning = false;
 let puppeteerBrowser: Browser;
@@ -79,7 +80,7 @@ const getAndStoreCookies = async () => {
 const insertItem = withRunningCheck(
   async (callback: () => void, webContents: WebContents, itemPath: string) => {
     puppeteerBrowser = await puppeteer.launch({
-      executablePath: './ungoogled-chromium_128.0.6613.84-1_linux/chrome',
+      executablePath: 'ungoogled-chromium/chrome',
       // defaultViewport: {
       //   width: 1366,
       //   height: 768
