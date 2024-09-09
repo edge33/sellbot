@@ -2,11 +2,12 @@ import { WebContents } from 'electron';
 import puppeteer, { Browser, ElementHandle, Page } from 'puppeteer-core';
 import { getSettings, storeCookies } from '../settings';
 import { getItem } from '../items';
+import path from 'path';
 
 let isRunning = false;
 let puppeteerBrowser: Browser;
 let puppeteerPage: Page;
-const CHROMIUM_PATH = 'ungoogled-chromium/chrome';
+const CHROMIUM_PATH = path.join('ungoogled-chromium', 'chrome');
 
 const ACTION_TIMEOUT = 1000;
 
