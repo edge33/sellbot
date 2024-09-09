@@ -6,6 +6,7 @@ import { getItem } from '../items';
 let isRunning = false;
 let puppeteerBrowser: Browser;
 let puppeteerPage: Page;
+const CHROMIUM_PATH = 'ungoogled-chromium/chrome';
 
 const ACTION_TIMEOUT = 1000;
 
@@ -30,7 +31,7 @@ const withRunningCheck = <T extends unknown[]>(
 };
 const handleAuth = withRunningCheck(async (callback: () => void, webContents: WebContents) => {
   puppeteerBrowser = await puppeteer.launch({
-    executablePath: './ungoogled-chromium_128.0.6613.84-1_linux/chrome',
+    executablePath: CHROMIUM_PATH,
     defaultViewport: {
       width: 1366,
       height: 768
@@ -79,7 +80,7 @@ const getAndStoreCookies = async () => {
 const insertItem = withRunningCheck(
   async (callback: () => void, webContents: WebContents, itemPath: string) => {
     puppeteerBrowser = await puppeteer.launch({
-      executablePath: 'ungoogled-chromium/chrome',
+      executablePath: CHROMIUM_PATH,
       // defaultViewport: {
       //   width: 1366,
       //   height: 768
