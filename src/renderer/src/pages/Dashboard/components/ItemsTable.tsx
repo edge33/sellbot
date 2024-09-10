@@ -12,8 +12,6 @@ const ItemsTable = ({ items }: ItemsTableProps) => {
   const [itemToDelete, setItemToDelete] = useState<string>();
 
   const handleInsertItemClick = (filePath: string) => {
-    console.log(filePath);
-
     window.insertItem(filePath);
   };
 
@@ -73,7 +71,7 @@ const ItemsTable = ({ items }: ItemsTableProps) => {
                 <>
                   <SecondaryButton
                     action={() => {
-                      console.log('deleting', item.filePath);
+                      alert('feature coming soon..');
                     }}
                     label="Conferma"
                   />

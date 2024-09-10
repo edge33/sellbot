@@ -11,9 +11,16 @@ import { useSettingsContext } from './Context/context';
 import Products from './pages/Dashboard/Products';
 import Settings from './pages/Settings';
 import DefaultLayout from './ui/layout/DefaultLayout';
+import { AppSettings } from '@shared/types';
+
+const isMissingConfig = (appSettings: AppSettings) => {
+  const { chromiumPath, cookiesStored, mobilePhone, itemsPath } = appSettings;
+
+  return !chromiumPath || !cookiesStored || !mobilePhone || !itemsPath;
+};
 
 function App() {
-  const { loading, itemsPath, cookiesStored } = useSettingsContext();
+  const { loading, appSettings } = useSettingsContext();
 
   const router = createHashRouter(
     createRoutesFromElements(
@@ -22,7 +29,7 @@ function App() {
           <Route
             index
             loader={async () => {
-              if (!loading && (!itemsPath || !cookiesStored)) {
+              if (!loading && isMissingConfig(appSettings)) {
                 return replace('/settings');
               }
               return null;

@@ -30,9 +30,10 @@ const getAppSettings = (): AppSettings | undefined => {
   }
 
   return {
+    chromiumPath: settings?.chromiumPath,
     cookiesStored: settings?.cookies?.length > 0,
     itemsPath: settings?.itemsPath,
-    mobilePhone: ''
+    mobilePhone: settings?.mobilePhone
   };
 };
 
@@ -51,14 +52,14 @@ const storeCookies = (cookies: Cookie[]) => {
   writeFileSync(filePath, JSON.stringify(newSettings));
 };
 
-const storeItemsPath = (itemsPath: string) => {
+const storeSettings = (appSettings: AppSettings) => {
   const settings = getSettings();
 
   let newSettings = {};
   if (settings) {
-    newSettings = { ...settings, itemsPath };
+    newSettings = { ...settings, ...appSettings };
   } else {
-    newSettings = { itemsPath };
+    newSettings = { appSettings };
   }
 
   const filePath = getConfigFilePath();
@@ -66,4 +67,4 @@ const storeItemsPath = (itemsPath: string) => {
   writeFileSync(filePath, JSON.stringify(newSettings));
 };
 
-export { getAppSettings, storeCookies, getSettings, storeItemsPath };
+export { getAppSettings, storeCookies, getSettings, storeSettings };

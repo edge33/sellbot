@@ -10,7 +10,7 @@ declare global {
     getSettings: () => Promise<AppSettings>;
     auth: () => Promise<void>;
     storeCookies: () => Promise<void>;
-    storeItemsPath: (itemsPath: string) => Promise<void>;
+    storeSettings: (appSettings: Partial<AppSettings>) => Promise<void>;
     getItems: () => Promise<Item[]>;
     insertItem: (filePath: string) => Promise<void>;
   }

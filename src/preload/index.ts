@@ -1,6 +1,7 @@
 import { electronAPI } from '@electron-toolkit/preload';
 import { contextBridge, ipcRenderer } from 'electron';
 import { IPC_CHANNELS } from '../main/ipcs';
+import { AppSettings } from '../shared/types';
 // Custom APIs for renderer
 const api = {};
 
@@ -21,8 +22,8 @@ if (process.contextIsolated) {
     contextBridge.exposeInMainWorld('getSettings', () =>
       ipcRenderer.invoke(IPC_CHANNELS.GET_SETTINGS)
     );
-    contextBridge.exposeInMainWorld('storeItemsPath', (itemsPath: string) =>
-      ipcRenderer.invoke(IPC_CHANNELS.STORE_ITEMS_PATH, itemsPath)
+    contextBridge.exposeInMainWorld('storeSettings', (appSettings: AppSettings) =>
+      ipcRenderer.invoke(IPC_CHANNELS.STORE_SETTINGS, appSettings)
     );
     contextBridge.exposeInMainWorld('getItems', () => ipcRenderer.invoke(IPC_CHANNELS.GET_ITEMS));
     contextBridge.exposeInMainWorld('insertItem', (filePath: string) =>

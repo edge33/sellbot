@@ -1,20 +1,19 @@
-import { app, WebContents } from 'electron';
+import { WebContents } from 'electron';
 import puppeteer, { Browser, ElementHandle, Page } from 'puppeteer-core';
-import { getSettings, storeCookies } from '../settings';
+import { getAppSettings, getSettings, storeCookies } from '../settings';
 import { getItem } from '../items';
-import path from 'path';
 
 let isRunning = false;
 let puppeteerBrowser: Browser;
 let puppeteerPage: Page;
 
-function getAppRoot() {
-  if (process.platform === 'win32') {
-    return path.join(app.getAppPath(), '/../../');
-  } else {
-    return path.join(app.getAppPath(), '/../');
-  }
-}
+// function getAppRoot() {
+//   if (process.platform === 'win32') {
+//     return path.join(app.getAppPath(), '/../../');
+//   } else {
+//     return path.join(app.getAppPath(), '/../');
+//   }
+// }
 
 const ACTION_TIMEOUT = 1000;
 
@@ -40,11 +39,17 @@ const withRunningCheck = <T extends unknown[]>(
   };
 };
 const handleAuth = withRunningCheck(async (callback: () => void, webContents: WebContents) => {
-  const CHROMIUM_PATH = path.join(getAppRoot(), 'ungoogled-chromium', 'chrome.exe');
-  console.log({ CHROMIUM_PATH });
+  const appSettings = getAppSettings();
+
+  if (!appSettings) {
+    callback();
+    return;
+  }
+
+  const { chromiumPath } = appSettings;
 
   puppeteerBrowser = await puppeteer.launch({
-    executablePath: CHROMIUM_PATH,
+    executablePath: chromiumPath,
     defaultViewport: {
       width: 1366,
       height: 768
@@ -53,12 +58,6 @@ const handleAuth = withRunningCheck(async (callback: () => void, webContents: We
   });
 
   puppeteerPage = await puppeteerBrowser.newPage();
-
-  //TODO: Move this to actual action with auth
-  // const cookies = getSettings().cookies;
-  // for (const cookie of cookies) {
-  //   puppeteerPage.setCookie(cookie);
-  // }
 
   // Load a URL or website
   await puppeteerPage.goto('https://subito.it');
@@ -92,11 +91,17 @@ const getAndStoreCookies = async () => {
 
 const insertItem = withRunningCheck(
   async (callback: () => void, webContents: WebContents, itemPath: string) => {
-    const CHROMIUM_PATH = path.join(getAppRoot(), 'ungoogled-chromium', 'chrome.exe');
-    console.log({ CHROMIUM_PATH });
+    const appSettings = getAppSettings();
+
+    if (!appSettings) {
+      callback();
+      return;
+    }
+
+    const { chromiumPath, mobilePhone } = appSettings;
 
     puppeteerBrowser = await puppeteer.launch({
-      executablePath: CHROMIUM_PATH,
+      executablePath: chromiumPath,
       // defaultViewport: {
       //   width: 1366,
       //   height: 768
@@ -112,8 +117,6 @@ const insertItem = withRunningCheck(
       callback();
       return;
     }
-
-    const appSettings = getSettings();
 
     puppeteerPage.on('close', () => {
       console.log('page was closed ');
@@ -195,7 +198,7 @@ const insertItem = withRunningCheck(
     webContents.send('log', 'set dimension');
     await delay(ACTION_TIMEOUT);
 
-    phone?.type(appSettings.mobilePhone);
+    phone?.type(mobilePhone);
     webContents.send('log', 'set mobile phone');
     await delay(ACTION_TIMEOUT);
 

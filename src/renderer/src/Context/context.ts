@@ -1,8 +1,9 @@
 import React, { useContext } from 'react';
 import type { AppSettings } from '@shared/types';
 
-export type SettingsContextState = AppSettings & {
+export type SettingsContextState = {
   loading: boolean;
+  appSettings: AppSettings;
 };
 
 export type SettingsContextType = SettingsContextState & {
@@ -10,10 +11,14 @@ export type SettingsContextType = SettingsContextState & {
 };
 
 const SettingsContext = React.createContext<SettingsContextType>({
+  appSettings: {
+    cookiesStored: false,
+    mobilePhone: '',
+    chromiumPath: 'undefined',
+    itemsPath: ''
+  },
   loading: true,
-  cookiesStored: false,
-  updateConfig: () => Promise.reject(),
-  mobilePhone: ''
+  updateConfig: () => Promise.reject()
 });
 
 export const useSettingsContext = () => useContext(SettingsContext);

@@ -2,6 +2,7 @@ type AppSettings = {
   itemsPath?: string;
   cookiesStored: boolean;
   mobilePhone: string;
+  chromiumPath: string;
 };
 
 type Item = {

@@ -6,15 +6,18 @@ const updateSettings = async (
   setConfig: React.Dispatch<React.SetStateAction<SettingsContextState>>
 ) => {
   const settings = await window.getSettings();
-
-  setConfig({ ...settings, loading: false });
+  setConfig({ appSettings: settings, loading: false });
 };
 
 const SettingsContextProvider = ({ children }: { children: JSX.Element }) => {
   const [config, setConfig] = useState<SettingsContextState>({
     loading: true,
-    cookiesStored: false,
-    mobilePhone: ''
+    appSettings: {
+      cookiesStored: false,
+      mobilePhone: '',
+      chromiumPath: '',
+      itemsPath: ''
+    }
   });
 
   const handleUpdateSettings = useCallback(() => updateSettings(setConfig), []);
