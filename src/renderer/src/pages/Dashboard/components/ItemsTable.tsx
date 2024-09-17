@@ -3,6 +3,7 @@ import SecondaryButton from '@renderer/ui/buttons/SecondaryButton';
 import TertiaryButton from '@renderer/ui/buttons/TertiaryButton';
 import { Item } from '@shared/types';
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 
 type ItemsTableProps = {
   items: Item[];
@@ -10,6 +11,7 @@ type ItemsTableProps = {
 
 const ItemsTable = ({ items }: ItemsTableProps) => {
   const [itemToDelete, setItemToDelete] = useState<string>();
+  const navigate = useNavigate();
 
   const handleInsertItemClick = (filePath: string) => {
     window.insertItem(filePath);
@@ -42,14 +44,23 @@ const ItemsTable = ({ items }: ItemsTableProps) => {
             className="grid grid-cols-6 border-t border-stroke py-4.5 px-4 dark:border-strokedark sm:grid-cols-8 md:px-6 2xl:px-7.5"
             key={key}
           >
-            <div className="col-span-3 flex items-center">
+            <div
+              onClick={() => {
+                return navigate(`/items/${item.id}/edit`);
+              }}
+              className=" cursor-pointer col-span-3 flex items-center"
+            >
               <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
                 <div className="h-12.5 w-15 rounded-md">
-                  <img
-                    className="max-w-full max-h-full"
-                    src={`data:image/png;base64, ${item.photos[0]}`}
-                    alt="Product"
-                  />
+                  {item.photos?.length ? (
+                    <img
+                      className="max-w-full max-h-full"
+                      src={`data:image/png;base64, ${item.photos[0]}`}
+                      alt="Product"
+                    />
+                  ) : (
+                    <span>no picture...</span>
+                  )}
                 </div>
                 <p className="text-sm text-black dark:text-white">{item.title}</p>
               </div>
@@ -63,7 +74,9 @@ const ItemsTable = ({ items }: ItemsTableProps) => {
             <div className="col-span-1 flex items-center flex gap-7.5">
               {itemToDelete !== `${key}` && (
                 <PrimaryButton
-                  action={() => handleInsertItemClick(item.filePath)}
+                  action={() => {
+                    handleInsertItemClick(item.filePath);
+                  }}
                   label="Inserisci"
                 />
               )}

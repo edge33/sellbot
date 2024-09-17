@@ -1,5 +1,6 @@
-import { readdirSync, readFileSync } from 'fs';
-import { getSettings } from '../settings';
+import { readdirSync, readFileSync, writeFileSync } from 'fs';
+import { v4 as uuidv4 } from 'uuid';
+import { getAppSettings, getSettings } from '../settings';
 import path from 'path';
 import type { Item } from '../../shared/types';
 
@@ -13,10 +14,8 @@ const getItems = () => {
     for (const fileName of fileNames) {
       const filePath = path.join(itemsPath, fileName);
       const item = JSON.parse(readFileSync(filePath, 'utf-8')) as Item;
-      const previewPicture = item.photos[0];
-      const _img = readFileSync(previewPicture).toString('base64');
 
-      items.push({ ...item, filePath, photos: [_img] });
+      items.push({ ...item, filePath });
     }
   } catch (err) {
     console.log(err);
@@ -25,7 +24,48 @@ const getItems = () => {
   return items;
 };
 
-const getItem = (filePath: string) => {
+const getItemsWithEncodedPics = () => {
+  const items = getItems();
+  try {
+    for (const item of items) {
+      if (item.photos) {
+        item.photos = encodePics(item.photos);
+      }
+    }
+  } catch (err) {
+    console.log(err);
+  }
+  return items;
+};
+
+const getItemWithEncodedPics = (itemId: string) => {
+  const item = getItem(itemId);
+  try {
+    if (item?.photos) {
+      item.photos = encodePics(item.photos);
+    }
+    return item;
+  } catch (err) {
+    console.log(err);
+  }
+  return undefined;
+};
+
+const encodePics = (picturePaths: string[]) => {
+  const encodedPics: string[] = [];
+  for (const currentPic of picturePaths) {
+    encodedPics.push(readFileSync(currentPic).toString('base64'));
+  }
+  return encodedPics;
+};
+
+const getItem = (itemId: string) => {
+  const items = getItems();
+
+  return items.find((item) => item.id === itemId);
+};
+
+const getItemByPath = (filePath: string) => {
   let item: Item;
   try {
     item = JSON.parse(readFileSync(filePath, 'utf-8'));
@@ -36,4 +76,36 @@ const getItem = (filePath: string) => {
   return item;
 };
 
-export { getItems, getItem };
+const updateItem = (item: Item) => {
+  try {
+    if (item.id) {
+      const currentItem = getItem(item.id);
+
+      if (!currentItem) {
+        return;
+      }
+
+      const newItem = { ...item };
+
+      if (!item.photos?.length) {
+        newItem.photos = currentItem?.photos;
+      }
+
+      writeFileSync(currentItem.filePath, JSON.stringify(newItem));
+      return true;
+    }
+
+    const settings = getAppSettings();
+
+    const id = uuidv4();
+    const newItem = { ...item, id };
+    writeFileSync(path.join(settings?.itemsPath as string, `${id}.json`), JSON.stringify(newItem));
+
+    return true;
+  } catch (err) {
+    console.log(err);
+    return false;
+  }
+};
+
+export { getItemsWithEncodedPics, getItemWithEncodedPics, getItemByPath, updateItem };

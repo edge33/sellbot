@@ -1,23 +1,13 @@
 import { WebContents } from 'electron';
 import puppeteer, { Browser, ElementHandle, Page } from 'puppeteer-core';
 import { getAppSettings, getSettings, storeCookies } from '../settings';
-import { getItem } from '../items';
+import { getItemByPath } from '../items';
 
 let isRunning = false;
 let puppeteerBrowser: Browser;
 let puppeteerPage: Page;
 
-// function getAppRoot() {
-//   if (process.platform === 'win32') {
-//     return path.join(app.getAppPath(), '/../../');
-//   } else {
-//     return path.join(app.getAppPath(), '/../');
-//   }
-// }
-
 const ACTION_TIMEOUT = 1000;
-
-// console.log({ path: app.getPath('exe') });
 
 const delay = (timeout: number) =>
   new Promise<void>((resolve) => setTimeout(() => resolve(), timeout));
@@ -25,7 +15,7 @@ const delay = (timeout: number) =>
 const withRunningCheck = <T extends unknown[]>(
   fn: (callback: () => void, ...params: T) => Promise<void>
 ) => {
-  return (...params: T) => {
+  return async (...params: T) => {
     if (isRunning) {
       return;
     }
@@ -35,7 +25,13 @@ const withRunningCheck = <T extends unknown[]>(
       isRunning = false;
     };
 
-    fn(callback, ...params);
+    try {
+      await fn(callback, ...params);
+    } catch (err) {
+      console.log(err);
+
+      callback();
+    }
   };
 };
 const handleAuth = withRunningCheck(async (callback: () => void, webContents: WebContents) => {
@@ -111,7 +107,7 @@ const insertItem = withRunningCheck(
 
     puppeteerPage = await puppeteerBrowser.newPage();
 
-    const item = getItem(itemPath);
+    const item = getItemByPath(itemPath);
     if (!item) {
       console.error(`Item ${itemPath} was not found`);
       callback();
@@ -130,13 +126,12 @@ const insertItem = withRunningCheck(
     }
 
     // Load a URL or website
-    await puppeteerPage.goto('https://inserimento.subito.it/?category=10&from=vendere');
+    await puppeteerPage.goto(
+      `https://inserimento.subito.it/?category=${item.category}&from=vendere`
+    );
     webContents.send('log', 'Opened page');
 
     await puppeteerPage.waitForSelector('#title');
-
-    // TODO: make this dynamic
-    (await puppeteerPage.$('#menu-elettronica'))?.click();
 
     const title = await puppeteerPage.$('#title');
     const description = await puppeteerPage.$('#description');
@@ -153,9 +148,12 @@ const insertItem = withRunningCheck(
     webContents.send('log', 'set title');
     await delay(ACTION_TIMEOUT);
 
-    for (const picture of item.photos) {
-      await fileInput.uploadFile(picture);
+    if (item.photos) {
+      for (const picture of item.photos) {
+        await fileInput.uploadFile(picture);
+      }
     }
+
     webContents.send('log', 'set pics');
     await delay(ACTION_TIMEOUT);
 
@@ -169,15 +167,34 @@ const insertItem = withRunningCheck(
     webContents.send('log', 'set condition');
     await delay(ACTION_TIMEOUT);
 
-    const computerTypeSelector = await puppeteerPage.waitForSelector(
-      '::-p-xpath(/html/body/div/div/main/div[2]/form/div/section[6]/div[2]/div)'
-    );
+    if (item.type) {
+      const typeSelectorElement = await puppeteerPage.waitForSelector(
+        '::-p-xpath(/html/body/div/div/main/div[2]/form/div/section[6]/div[2]/div)'
+      );
 
-    await computerTypeSelector?.click();
-    await delay(ACTION_TIMEOUT);
-    (await puppeteerPage.waitForSelector(`#computerType__option--${item.type}`))?.click();
-    webContents.send('log', 'set type');
-    await delay(ACTION_TIMEOUT);
+      await typeSelectorElement?.click();
+      await delay(ACTION_TIMEOUT);
+      let typeSelector = 'computerType';
+
+      switch (item.category) {
+        case '10': {
+          typeSelector = 'computerType';
+          break;
+        }
+        case '11': {
+          typeSelector = 'audioVideoType';
+          break;
+        }
+        case '12': {
+          typeSelector = 'phoneType';
+          break;
+        }
+      }
+
+      (await puppeteerPage.waitForSelector(`#${typeSelector}__option--${item.type}`))?.click();
+      webContents.send('log', 'set type');
+      await delay(ACTION_TIMEOUT);
+    }
 
     await location?.type('Cosenza');
     await delay(ACTION_TIMEOUT);
@@ -233,6 +250,7 @@ const insertItem = withRunningCheck(
     if (await thankYouPage?.isVisible()) {
       webContents.send('log', 'placement complete');
     }
+
     callback();
     await puppeteerBrowser.close();
   }

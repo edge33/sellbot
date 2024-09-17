@@ -8,10 +8,11 @@ import {
 import Loader from './common/Loader';
 import PageTitle from './components/PageTitle';
 import { useSettingsContext } from './Context/context';
-import Products from './pages/Dashboard/Products';
+import Products, { loader as productsLoader } from './pages/Dashboard/Products';
 import Settings from './pages/Settings';
 import DefaultLayout from './ui/layout/DefaultLayout';
 import { AppSettings } from '@shared/types';
+import Item, { loader as itemLoader } from './pages/Item/Item';
 
 const isMissingConfig = (appSettings: AppSettings) => {
   const { chromiumPath, cookiesStored, mobilePhone, itemsPath } = appSettings;
@@ -27,17 +28,29 @@ function App() {
       <Route path="/" element={<DefaultLayout />}>
         <>
           <Route
-            index
+            path="/"
             loader={async () => {
               if (!loading && isMissingConfig(appSettings)) {
                 return replace('/settings');
               }
-              return null;
+
+              return productsLoader();
             }}
             element={
               <>
                 <PageTitle title="Products | Sellbot" />
                 <Products />
+              </>
+            }
+          />
+
+          <Route
+            path="/items/:item/edit"
+            loader={itemLoader}
+            element={
+              <>
+                <PageTitle title="Item | Sellbot" />
+                <Item />
               </>
             }
           />
