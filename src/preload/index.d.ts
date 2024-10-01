@@ -11,9 +11,11 @@ declare global {
     auth: () => Promise<void>;
     storeCookies: () => Promise<void>;
     storeSettings: (appSettings: Partial<AppSettings>) => Promise<void>;
-    insertItem: (filePath: string) => Promise<void>;
+    insertItems: (itemIds: string[]) => Promise<void>;
     getItems: () => Promise<Item[]>;
     getItem: (fileId: string) => Promise<Item>;
     updateItem: (item: Item) => Promise<boolean>;
+    cloneItem: (itemId: string) => Promise<void>;
+    deleteItem: (itemId: string) => Promise<void>;
   }
 }

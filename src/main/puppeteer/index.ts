@@ -1,7 +1,7 @@
 import { WebContents } from 'electron';
 import puppeteer, { Browser, ElementHandle, Page } from 'puppeteer-core';
 import { getAppSettings, getSettings, storeCookies } from '../settings';
-import { getItemByPath } from '../items';
+import { getItem } from '../items';
 
 let isRunning = false;
 let puppeteerBrowser: Browser;
@@ -46,14 +46,13 @@ const handleAuth = withRunningCheck(async (callback: () => void, webContents: We
 
   puppeteerBrowser = await puppeteer.launch({
     executablePath: chromiumPath,
-    defaultViewport: {
-      width: 1366,
-      height: 768
-    },
+
     headless: false // Puppeteer controlled browser should be visible
   });
 
   puppeteerPage = await puppeteerBrowser.newPage();
+
+  await puppeteerPage.setViewport({ width: 1920, height: 1080 });
 
   // Load a URL or website
   await puppeteerPage.goto('https://subito.it');
@@ -85,8 +84,170 @@ const getAndStoreCookies = async () => {
   puppeteerBrowser.close();
 };
 
-const insertItem = withRunningCheck(
-  async (callback: () => void, webContents: WebContents, itemPath: string) => {
+const doInsertItem = async (
+  itemId: string,
+  webContents: WebContents,
+  chromiumPath: string,
+  mobilePhone: string,
+  callback: () => void
+) => {
+  puppeteerBrowser = await puppeteer.launch({
+    executablePath: chromiumPath,
+    defaultViewport: null,
+    headless: false // Puppeteer controlled browser should be visible
+  });
+
+  puppeteerPage = await puppeteerBrowser.newPage();
+
+  const item = getItem(itemId);
+  if (!item) {
+    console.error(`Item ${itemId} was not found`);
+    callback();
+    return;
+  }
+
+  puppeteerPage.on('close', () => {
+    console.log('page was closed ');
+    callback();
+  });
+
+  //TODO: Move this to actual action with auth
+  const cookies = getSettings().cookies;
+  for (const cookie of cookies) {
+    puppeteerPage.setCookie(cookie);
+  }
+
+  // Load a URL or website
+  await puppeteerPage.goto(`https://inserimento.subito.it/?category=${item.category}&from=vendere`);
+  webContents.send('log', 'Opened page');
+
+  await puppeteerPage.waitForSelector('#title');
+
+  const title = await puppeteerPage.$('#title');
+  const description = await puppeteerPage.$('#description');
+  const price = await puppeteerPage.$('#price');
+  const location = await puppeteerPage.$('#location');
+  const fileInput = (await puppeteerPage.$('#file-input')) as ElementHandle<HTMLInputElement>;
+  const phone = await puppeteerPage.$('#phone');
+
+  const conditionSelector = await puppeteerPage.$(
+    '::-p-xpath(/html/body/div/div/main/div[2]/form/div/section[5]/div[2]/div)'
+  );
+
+  if (item.photos) {
+    for (const picture of item.photos) {
+      await fileInput.uploadFile(picture);
+      await delay(ACTION_TIMEOUT);
+    }
+  }
+
+  await title?.type(item.title);
+  webContents.send('log', 'set title');
+  await delay(ACTION_TIMEOUT);
+
+  webContents.send('log', 'set pics');
+  await delay(ACTION_TIMEOUT);
+
+  await description?.type(item.description);
+  webContents.send('log', 'set description');
+  await delay(ACTION_TIMEOUT);
+
+  await conditionSelector?.click();
+  await delay(ACTION_TIMEOUT);
+  (await puppeteerPage.$(`#itemCondition__option--${item.condition}`))?.click();
+  webContents.send('log', 'set condition');
+  await delay(ACTION_TIMEOUT);
+
+  if (item.type) {
+    const typeSelectorElement = await puppeteerPage.waitForSelector(
+      '::-p-xpath(/html/body/div/div/main/div[2]/form/div/section[6]/div[2]/div)'
+    );
+
+    await typeSelectorElement?.click();
+    await delay(ACTION_TIMEOUT);
+    let typeSelector = 'computerType';
+
+    switch (item.category) {
+      case '10': {
+        typeSelector = 'computerType';
+        break;
+      }
+      case '11': {
+        typeSelector = 'audioVideoType';
+        break;
+      }
+      case '12': {
+        typeSelector = 'phoneType';
+        break;
+      }
+    }
+
+    (await puppeteerPage.waitForSelector(`#${typeSelector}__option--${item.type}`))?.click();
+    webContents.send('log', 'set type');
+    await delay(ACTION_TIMEOUT);
+  }
+
+  await location?.type('Cosenza');
+  await delay(ACTION_TIMEOUT);
+  (await puppeteerPage.waitForSelector('#autocomplete-location-item-0'))?.click();
+  webContents.send('log', 'set location');
+  await delay(ACTION_TIMEOUT);
+
+  await price?.type(`${item.price}`);
+  webContents.send('log', 'set price');
+  await delay(ACTION_TIMEOUT);
+
+  (
+    await puppeteerPage.$(
+      `::-p-xpath(/html/body/div/div/main/div[2]/form/div/section[11]/section/label[${item.dimension}])`
+    )
+  )?.click();
+
+  webContents.send('log', 'set dimension');
+  await delay(ACTION_TIMEOUT);
+
+  phone?.type(mobilePhone);
+  webContents.send('log', 'set mobile phone');
+  await delay(ACTION_TIMEOUT);
+
+  const submitButton = await puppeteerPage.$(
+    '::-p-xpath(/html/body/div/div/main/div[2]/form/section/button)'
+  );
+
+  submitButton?.click();
+  webContents.send('log', 'submit');
+  await delay(ACTION_TIMEOUT);
+
+  const publishButton = await puppeteerPage.waitForSelector(
+    '::-p-xpath(/html/body/div/div/main/div[2]/div/section/button[2])'
+  );
+
+  await publishButton?.click();
+  webContents.send('log', 'publish');
+  await delay(ACTION_TIMEOUT);
+
+  const skipVisibilityButton = await puppeteerPage.waitForSelector(
+    '::-p-xpath(html/body/div[2]/div/main/section/footer/div/button)'
+  );
+
+  await skipVisibilityButton?.click();
+  webContents.send('log', 'skip visibility');
+  await delay(ACTION_TIMEOUT);
+
+  const thankYouPage = await puppeteerPage.waitForSelector(
+    '::-p-xpath(//*[@id="__next"]/div/main/div[2]/div[1]/h1)'
+  );
+
+  if (await thankYouPage?.isVisible()) {
+    webContents.send('log', 'placement complete');
+  }
+
+  callback();
+  await puppeteerBrowser.close();
+};
+
+const insertItems = withRunningCheck(
+  async (callback: () => void, webContents: WebContents, itemIds: string[]) => {
     const appSettings = getAppSettings();
 
     if (!appSettings) {
@@ -96,164 +257,10 @@ const insertItem = withRunningCheck(
 
     const { chromiumPath, mobilePhone } = appSettings;
 
-    puppeteerBrowser = await puppeteer.launch({
-      executablePath: chromiumPath,
-      // defaultViewport: {
-      //   width: 1366,
-      //   height: 768
-      // },
-      headless: false // Puppeteer controlled browser should be visible
-    });
-
-    puppeteerPage = await puppeteerBrowser.newPage();
-
-    const item = getItemByPath(itemPath);
-    if (!item) {
-      console.error(`Item ${itemPath} was not found`);
-      callback();
-      return;
+    for (const itemId of itemIds) {
+      await doInsertItem(itemId, webContents, chromiumPath, mobilePhone, callback);
     }
-
-    puppeteerPage.on('close', () => {
-      console.log('page was closed ');
-      callback();
-    });
-
-    //TODO: Move this to actual action with auth
-    const cookies = getSettings().cookies;
-    for (const cookie of cookies) {
-      puppeteerPage.setCookie(cookie);
-    }
-
-    // Load a URL or website
-    await puppeteerPage.goto(
-      `https://inserimento.subito.it/?category=${item.category}&from=vendere`
-    );
-    webContents.send('log', 'Opened page');
-
-    await puppeteerPage.waitForSelector('#title');
-
-    const title = await puppeteerPage.$('#title');
-    const description = await puppeteerPage.$('#description');
-    const price = await puppeteerPage.$('#price');
-    const location = await puppeteerPage.$('#location');
-    const fileInput = (await puppeteerPage.$('#file-input')) as ElementHandle<HTMLInputElement>;
-    const phone = await puppeteerPage.$('#phone');
-
-    const conditionSelector = await puppeteerPage.$(
-      '::-p-xpath(/html/body/div/div/main/div[2]/form/div/section[5]/div[2]/div)'
-    );
-
-    await title?.type(item.title);
-    webContents.send('log', 'set title');
-    await delay(ACTION_TIMEOUT);
-
-    if (item.photos) {
-      for (const picture of item.photos) {
-        await fileInput.uploadFile(picture);
-      }
-    }
-
-    webContents.send('log', 'set pics');
-    await delay(ACTION_TIMEOUT);
-
-    await description?.type(item.description);
-    webContents.send('log', 'set description');
-    await delay(ACTION_TIMEOUT);
-
-    await conditionSelector?.click();
-    await delay(ACTION_TIMEOUT);
-    (await puppeteerPage.$(`#itemCondition__option--${item.condition}`))?.click();
-    webContents.send('log', 'set condition');
-    await delay(ACTION_TIMEOUT);
-
-    if (item.type) {
-      const typeSelectorElement = await puppeteerPage.waitForSelector(
-        '::-p-xpath(/html/body/div/div/main/div[2]/form/div/section[6]/div[2]/div)'
-      );
-
-      await typeSelectorElement?.click();
-      await delay(ACTION_TIMEOUT);
-      let typeSelector = 'computerType';
-
-      switch (item.category) {
-        case '10': {
-          typeSelector = 'computerType';
-          break;
-        }
-        case '11': {
-          typeSelector = 'audioVideoType';
-          break;
-        }
-        case '12': {
-          typeSelector = 'phoneType';
-          break;
-        }
-      }
-
-      (await puppeteerPage.waitForSelector(`#${typeSelector}__option--${item.type}`))?.click();
-      webContents.send('log', 'set type');
-      await delay(ACTION_TIMEOUT);
-    }
-
-    await location?.type('Cosenza');
-    await delay(ACTION_TIMEOUT);
-    (await puppeteerPage.waitForSelector('#autocomplete-location-item-0'))?.click();
-    webContents.send('log', 'set location');
-    await delay(ACTION_TIMEOUT);
-
-    await price?.type(`${item.price}`);
-    webContents.send('log', 'set price');
-    await delay(ACTION_TIMEOUT);
-
-    (
-      await puppeteerPage.$(
-        `::-p-xpath(/html/body/div/div/main/div[2]/form/div/section[11]/section/label[${item.dimension}])`
-      )
-    )?.click();
-
-    webContents.send('log', 'set dimension');
-    await delay(ACTION_TIMEOUT);
-
-    phone?.type(mobilePhone);
-    webContents.send('log', 'set mobile phone');
-    await delay(ACTION_TIMEOUT);
-
-    const submitButton = await puppeteerPage.$(
-      '::-p-xpath(/html/body/div/div/main/div[2]/form/section/button)'
-    );
-
-    submitButton?.click();
-    webContents.send('log', 'submit');
-    await delay(ACTION_TIMEOUT);
-
-    const publishButton = await puppeteerPage.waitForSelector(
-      '::-p-xpath(/html/body/div/div/main/div[2]/div/section/button[2])'
-    );
-
-    await publishButton?.click();
-    webContents.send('log', 'publish');
-    await delay(ACTION_TIMEOUT);
-
-    const skipVisibilityButton = await puppeteerPage.waitForSelector(
-      '::-p-xpath(html/body/div[2]/div/main/section/footer/div/button)'
-    );
-
-    await skipVisibilityButton?.click();
-    webContents.send('log', 'skip visibility');
-    await delay(ACTION_TIMEOUT);
-
-    const thankYouPage = await puppeteerPage.waitForSelector(
-      '::-p-xpath(//*[@id="__next"]/div/main/div[2]/div[1]/h1)'
-    );
-
-    if (await thankYouPage?.isVisible()) {
-      webContents.send('log', 'placement complete');
-    }
-
-    callback();
-    await puppeteerBrowser.close();
   }
 );
 
-export { handleAuth, getAndStoreCookies, insertItem };
+export { handleAuth, getAndStoreCookies, insertItems };

@@ -26,8 +26,8 @@ if (process.contextIsolated) {
       ipcRenderer.invoke(IPC_CHANNELS.STORE_SETTINGS, appSettings)
     );
 
-    contextBridge.exposeInMainWorld('insertItem', (filePath: string) =>
-      ipcRenderer.invoke(IPC_CHANNELS.INSERT_ITEM, filePath)
+    contextBridge.exposeInMainWorld('insertItems', (itemIds: string[]) =>
+      ipcRenderer.invoke(IPC_CHANNELS.INSERT_ITEMS, itemIds)
     );
 
     contextBridge.exposeInMainWorld('getItems', () => ipcRenderer.invoke(IPC_CHANNELS.GET_ITEMS));
@@ -36,6 +36,12 @@ if (process.contextIsolated) {
     );
     contextBridge.exposeInMainWorld('updateItem', (item: Item) =>
       ipcRenderer.invoke(IPC_CHANNELS.UPDATE_ITEM, item)
+    );
+    contextBridge.exposeInMainWorld('cloneItem', (itemId: string) =>
+      ipcRenderer.invoke(IPC_CHANNELS.CLONE_ITEM, itemId)
+    );
+    contextBridge.exposeInMainWorld('deleteItem', (itemId: string) =>
+      ipcRenderer.invoke(IPC_CHANNELS.DELETE_ITEM, itemId)
     );
   } catch (error) {
     console.error(error);

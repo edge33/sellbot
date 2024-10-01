@@ -7,18 +7,18 @@ export type SettingsContextState = {
 };
 
 export type SettingsContextType = SettingsContextState & {
-  updateConfig: () => Promise<void>;
+  updateConfig: () => void;
 };
 
 const SettingsContext = React.createContext<SettingsContextType>({
   appSettings: {
     cookiesStored: false,
     mobilePhone: '',
-    chromiumPath: 'undefined',
+    chromiumPath: '',
     itemsPath: ''
   },
   loading: true,
-  updateConfig: () => Promise.reject()
+  updateConfig: () => {}
 });
 
 export const useSettingsContext = () => useContext(SettingsContext);

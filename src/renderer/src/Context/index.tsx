@@ -5,8 +5,10 @@ import SettingsContext from './context';
 const updateSettings = async (
   setConfig: React.Dispatch<React.SetStateAction<SettingsContextState>>
 ) => {
-  const settings = await window.getSettings();
-  setConfig({ appSettings: settings, loading: false });
+  const newSettings = await window.getSettings();
+  setConfig((settings) => {
+    return { appSettings: newSettings ? newSettings : settings.appSettings, loading: false };
+  });
 };
 
 const SettingsContextProvider = ({ children }: { children: JSX.Element }) => {

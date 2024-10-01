@@ -15,6 +15,9 @@ import { AppSettings } from '@shared/types';
 import Item, { loader as itemLoader } from './pages/Item/Item';
 
 const isMissingConfig = (appSettings: AppSettings) => {
+  if (!appSettings) {
+    return true;
+  }
   const { chromiumPath, cookiesStored, mobilePhone, itemsPath } = appSettings;
 
   return !chromiumPath || !cookiesStored || !mobilePhone || !itemsPath;
@@ -29,7 +32,7 @@ function App() {
         <>
           <Route
             path="/"
-            loader={async () => {
+            loader={() => {
               if (!loading && isMissingConfig(appSettings)) {
                 return replace('/settings');
               }

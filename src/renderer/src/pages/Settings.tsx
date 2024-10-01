@@ -69,8 +69,6 @@ const Settings = () => {
         chromiumPath: chromiumPathValue,
         mobilePhone: mobilePhoneValue
       });
-
-      updateConfig();
     } catch (err) {
       console.log(err);
       setErrorState((errorState) => ({
@@ -88,12 +86,13 @@ const Settings = () => {
     inputMobilePhoneRef.current.value = mobilePhone;
   }
 
-  const openWebsite = () => {
-    window.auth();
+  const openWebsite = async () => {
+    await window.auth();
   };
 
   const storeCookies = async () => {
     await window.storeCookies();
+
     updateConfig();
   };
 
@@ -132,41 +131,6 @@ const Settings = () => {
         )}
 
         <div className="grid grid-cols-5 gap-8">
-          <div className="col-span-5">
-            <div className="rounded-sm border border-stroke bg-white shadow-default dark:border-strokedark dark:bg-boxdark">
-              <div className="border-b border-stroke py-4 px-7 dark:border-strokedark">
-                <h3 className="font-medium text-black dark:text-white">
-                  Autenticazione
-                  {!cookiesStored && (
-                    <>
-                      {' '}
-                      - <span className="font-semibold text-[#B45454]">Cookie non salvati</span>
-                    </>
-                  )}
-                </h3>
-              </div>
-              <div className="p-7">
-                <div className="flex gap-4.5">
-                  <button
-                    onClick={openWebsite}
-                    className="flex justify-center rounded bg-primary py-2 px-6 font-medium text-gray hover:bg-opacity-90"
-                    type="submit"
-                  >
-                    Apri subito.it
-                  </button>
-                  <button
-                    onClick={storeCookies}
-                    className="flex justify-center rounded bg-primary py-2 px-6 font-medium text-gray hover:bg-opacity-90"
-                    type="submit"
-                  >
-                    Salva cookies
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-        <div className="grid grid-cols-5 gap-8 mt-7.5">
           <div className="col-span-5">
             <div className="rounded-sm border border-stroke bg-white shadow-default dark:border-strokedark dark:bg-boxdark">
               <div className="border-b border-stroke py-4 px-7 dark:border-strokedark">
@@ -334,15 +298,49 @@ const Settings = () => {
                       </div>
                     </div>
                   )}
+                  <div className="flex gap-4.5">
+                    <button
+                      className="flex justify-center rounded bg-primary py-2 px-6 font-medium text-gray hover:bg-opacity-90"
+                      type="submit"
+                    >
+                      Salva
+                    </button>
+                  </div>
                 </form>
+              </div>
+            </div>
+          </div>
+        </div>
 
+        <div className="grid grid-cols-5 gap-8 mt-7.5">
+          <div className="col-span-5">
+            <div className="rounded-sm border border-stroke bg-white shadow-default dark:border-strokedark dark:bg-boxdark">
+              <div className="border-b border-stroke py-4 px-7 dark:border-strokedark">
+                <h3 className="font-medium text-black dark:text-white">
+                  Autenticazione
+                  {!cookiesStored && (
+                    <>
+                      {' '}
+                      - <span className="font-semibold text-[#B45454]">Cookie non salvati</span>
+                    </>
+                  )}
+                </h3>
+              </div>
+              <div className="p-7">
                 <div className="flex gap-4.5">
                   <button
-                    onClick={handlePathSave}
+                    onClick={openWebsite}
                     className="flex justify-center rounded bg-primary py-2 px-6 font-medium text-gray hover:bg-opacity-90"
                     type="submit"
                   >
-                    Salva
+                    Apri subito.it
+                  </button>
+                  <button
+                    onClick={storeCookies}
+                    className="flex justify-center rounded bg-primary py-2 px-6 font-medium text-gray hover:bg-opacity-90"
+                    type="submit"
+                  >
+                    Salva cookies
                   </button>
                 </div>
               </div>

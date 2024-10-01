@@ -50,8 +50,6 @@ const Item = () => {
   const typeRef = useRef<HTMLSelectElement>(null);
   const filePickerRef = useRef<HTMLInputElement>(null);
 
-  console.log({ item });
-
   const [selectedCategory, setSelectedCategory] = useState<CATEGORY>(item.category as CATEGORY);
   const [errors, setErrors] = useState<z.inferFormattedError<typeof itemSchema>>();
 
@@ -73,8 +71,6 @@ const Item = () => {
       pics = Array.from(fileList).map(({ path }) => path);
     }
 
-    console.log('got', { type });
-
     const update = {
       category,
       title,
@@ -85,8 +81,6 @@ const Item = () => {
       ...(type && CATEGORIES_WITH_TYPE.includes(category as CATEGORY) ? { type } : {}),
       photos: pics
     };
-
-    console.log('storing', { update });
 
     const result = itemSchema.safeParse(update);
 
@@ -108,8 +102,6 @@ const Item = () => {
       alert('Save failed, check logs');
     }
   };
-
-  console.log({ errors });
 
   return (
     <>

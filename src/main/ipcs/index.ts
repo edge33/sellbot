@@ -1,7 +1,13 @@
 import { BrowserWindow, ipcMain } from 'electron';
-import { handleAuth, getAndStoreCookies, insertItem } from '../puppeteer';
+import { handleAuth, getAndStoreCookies, insertItems } from '../puppeteer';
 import { getAppSettings, storeSettings } from '../settings';
-import { getItemWithEncodedPics, updateItem, getItemsWithEncodedPics } from '../items';
+import {
+  getItemWithEncodedPics,
+  updateItem,
+  getItemsWithEncodedPics,
+  cloneItem,
+  deleteItem
+} from '../items';
 import { AppSettings, Item } from '../../shared/types';
 
 const IPC_CHANNELS = {
@@ -11,8 +17,10 @@ const IPC_CHANNELS = {
   STORE_SETTINGS: 'STORE_SETTINGS',
   GET_ITEMS: 'GET_ITEMS',
   GET_ITEM: 'GET_ITEM',
-  INSERT_ITEM: 'INSERT_ITEM',
-  UPDATE_ITEM: 'UPDATE_ITEM'
+  INSERT_ITEMS: 'INSERT_ITEMS',
+  UPDATE_ITEM: 'UPDATE_ITEM',
+  CLONE_ITEM: 'CLONE_ITEM',
+  DELETE_ITEM: 'DELETE_ITEM'
 };
 
 const ipcs = (mainWindow: BrowserWindow) => {
@@ -24,13 +32,15 @@ const ipcs = (mainWindow: BrowserWindow) => {
     storeSettings(appSettings)
   );
 
-  ipcMain.handle(IPC_CHANNELS.INSERT_ITEM, (_, filePath: string) =>
-    insertItem(mainWindow.webContents, filePath)
+  ipcMain.handle(IPC_CHANNELS.INSERT_ITEMS, (_, itemIds: string[]) =>
+    insertItems(mainWindow.webContents, itemIds)
   );
 
   ipcMain.handle(IPC_CHANNELS.GET_ITEMS, () => getItemsWithEncodedPics());
   ipcMain.handle(IPC_CHANNELS.GET_ITEM, (_, itemId: string) => getItemWithEncodedPics(itemId));
   ipcMain.handle(IPC_CHANNELS.UPDATE_ITEM, (_, item: Item) => updateItem(item));
+  ipcMain.handle(IPC_CHANNELS.CLONE_ITEM, (_, itemId: string) => cloneItem(itemId));
+  ipcMain.handle(IPC_CHANNELS.DELETE_ITEM, (_, itemId: string) => deleteItem(itemId));
 };
 
 export default ipcs;

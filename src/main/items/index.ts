@@ -1,4 +1,4 @@
-import { readdirSync, readFileSync, writeFileSync } from 'fs';
+import { readdirSync, readFileSync, unlinkSync, writeFileSync } from 'fs';
 import { v4 as uuidv4 } from 'uuid';
 import { getAppSettings, getSettings } from '../settings';
 import path from 'path';
@@ -65,17 +65,6 @@ const getItem = (itemId: string) => {
   return items.find((item) => item.id === itemId);
 };
 
-const getItemByPath = (filePath: string) => {
-  let item: Item;
-  try {
-    item = JSON.parse(readFileSync(filePath, 'utf-8'));
-  } catch (err) {
-    console.log(err);
-    return undefined;
-  }
-  return item;
-};
-
 const updateItem = (item: Item) => {
   try {
     if (item.id) {
@@ -108,4 +97,26 @@ const updateItem = (item: Item) => {
   }
 };
 
-export { getItemsWithEncodedPics, getItemWithEncodedPics, getItemByPath, updateItem };
+const cloneItem = (itemId: string) => {
+  const newItem = getItem(itemId);
+  if (newItem) {
+    delete newItem?.id;
+    updateItem(newItem);
+  }
+};
+
+const deleteItem = (itemId: string) => {
+  const item = getItem(itemId);
+  if (item) {
+    unlinkSync(item.filePath);
+  }
+};
+
+export {
+  getItemsWithEncodedPics,
+  getItemWithEncodedPics,
+  getItem,
+  updateItem,
+  cloneItem,
+  deleteItem
+};
