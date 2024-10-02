@@ -1,5 +1,5 @@
 import { BrowserWindow, ipcMain } from 'electron';
-import { handleAuth, getAndStoreCookies, insertItems } from '../puppeteer';
+import { handleAuth, getAndStoreCookies, insertItems, removeListings } from '../puppeteer';
 import { getAppSettings, storeSettings } from '../settings';
 import {
   getItemWithEncodedPics,
@@ -20,7 +20,8 @@ const IPC_CHANNELS = {
   INSERT_ITEMS: 'INSERT_ITEMS',
   UPDATE_ITEM: 'UPDATE_ITEM',
   CLONE_ITEM: 'CLONE_ITEM',
-  DELETE_ITEM: 'DELETE_ITEM'
+  DELETE_ITEM: 'DELETE_ITEM',
+  REMOVE_LISTINGS: 'REMOVE_LISTINGS'
 };
 
 const ipcs = (mainWindow: BrowserWindow) => {
@@ -34,6 +35,10 @@ const ipcs = (mainWindow: BrowserWindow) => {
 
   ipcMain.handle(IPC_CHANNELS.INSERT_ITEMS, (_, itemIds: string[]) =>
     insertItems(mainWindow.webContents, itemIds)
+  );
+
+  ipcMain.handle(IPC_CHANNELS.REMOVE_LISTINGS, (_, itemIds: string[]) =>
+    removeListings(mainWindow.webContents, itemIds)
   );
 
   ipcMain.handle(IPC_CHANNELS.GET_ITEMS, () => getItemsWithEncodedPics());

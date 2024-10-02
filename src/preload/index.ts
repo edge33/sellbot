@@ -30,6 +30,10 @@ if (process.contextIsolated) {
       ipcRenderer.invoke(IPC_CHANNELS.INSERT_ITEMS, itemIds)
     );
 
+    contextBridge.exposeInMainWorld('removeListings', (itemIds: string[]) =>
+      ipcRenderer.invoke(IPC_CHANNELS.REMOVE_LISTINGS, itemIds)
+    );
+
     contextBridge.exposeInMainWorld('getItems', () => ipcRenderer.invoke(IPC_CHANNELS.GET_ITEMS));
     contextBridge.exposeInMainWorld('getItem', (itemId: string) =>
       ipcRenderer.invoke(IPC_CHANNELS.GET_ITEM, itemId)

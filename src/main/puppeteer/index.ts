@@ -111,7 +111,6 @@ const doInsertItem = async (
     callback();
   });
 
-  //TODO: Move this to actual action with auth
   const cookies = getSettings().cookies;
   for (const cookie of cookies) {
     puppeteerPage.setCookie(cookie);
@@ -242,8 +241,8 @@ const doInsertItem = async (
     webContents.send('log', 'placement complete');
   }
 
-  callback();
   await puppeteerBrowser.close();
+  callback();
 };
 
 const insertItems = withRunningCheck(
@@ -263,4 +262,91 @@ const insertItems = withRunningCheck(
   }
 );
 
-export { handleAuth, getAndStoreCookies, insertItems };
+const doRemoveItem = async (itemId, webContents, chromiumPath, callback) => {
+  puppeteerBrowser = await puppeteer.launch({
+    executablePath: chromiumPath,
+    defaultViewport: null,
+    headless: false // Puppeteer controlled browser should be visible
+  });
+
+  puppeteerPage = await puppeteerBrowser.newPage();
+
+  const item = getItem(itemId);
+  if (!item) {
+    console.error(`Item ${itemId} was not found`);
+    callback();
+    return;
+  }
+
+  puppeteerPage.on('close', () => {
+    console.log('page was closed ');
+    callback();
+  });
+
+  const cookies = getSettings().cookies;
+  for (const cookie of cookies) {
+    puppeteerPage.setCookie(cookie);
+  }
+
+  // Load a URL or website
+  await puppeteerPage.goto(`https://areariservata.subito.it/annunci`);
+  webContents.send('log', 'Opened page');
+
+  await puppeteerPage.waitForSelector('::-p-xpath(//span[text()="Seleziona annunci"])');
+
+  const itemInPage = await puppeteerPage.waitForSelector(
+    `::-p-xpath(//h2[text()="${item.title}"])`
+  );
+
+  if (!itemInPage) {
+    callback();
+    return;
+  }
+
+  webContents.send('log', `Item ${item.title} found in page`);
+
+  const container = await itemInPage?.waitForSelector('::-p-xpath(.//ancestor::li)');
+
+  const removeButton = await container?.waitForSelector('::-p-xpath(//span[text()="Elimina"])');
+
+  await removeButton?.click();
+
+  const reasonLabel = await puppeteerPage.waitForSelector(
+    '::-p-xpath(/html/body/div[3]/div[2]/div/div/div[1]/div/div/label[3])'
+  );
+
+  await reasonLabel?.click();
+
+  await delay(ACTION_TIMEOUT);
+
+  const deleteButton = await puppeteerPage.waitForSelector(
+    '::-p-xpath(/html/body/div[3]/div[2]/div/div/div[2]/button[2])'
+  );
+
+  deleteButton?.click();
+
+  await delay(ACTION_TIMEOUT);
+
+  webContents.send('log', 'Item removed');
+
+  await puppeteerBrowser.close();
+  callback();
+};
+
+const removeListings = withRunningCheck(
+  async (callback: () => void, webContents: WebContents, itemIds: string[]) => {
+    const appSettings = getAppSettings();
+
+    if (!appSettings) {
+      callback();
+      return;
+    }
+
+    const { chromiumPath } = appSettings;
+
+    for (const itemId of itemIds) {
+      await doRemoveItem(itemId, webContents, chromiumPath, callback);
+    }
+  }
+);
+export { handleAuth, getAndStoreCookies, insertItems, removeListings };
