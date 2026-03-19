@@ -1,6 +1,6 @@
 import Breadcrumb from '@renderer/components/Breadcrumbs/Breadcrumb';
 import type { Item } from '@shared/types';
-import { FormEvent, useRef, useState } from 'react';
+import { FormEvent, useRef, useState, useEffect } from 'react';
 import { useLoaderData, useNavigate } from 'react-router-dom';
 import { z } from 'zod';
 import SelectInput from './components/SelectInput';
@@ -15,6 +15,7 @@ import {
   COMPUTER_SCIENCE_TYPE
 } from './schema';
 import getOptionsForCategory from './getOptionsForCategory';
+import { fetchCategoryConfig } from './subitoApi';
 import { AUTO_BRANDS, MOTO_BRANDS } from './carData';
 
 const MOTORI_CATEGORIES = ['2', '3', '4', '22', '34'];
@@ -50,16 +51,31 @@ const Item = () => {
   const typeRef = useRef<HTMLSelectElement>(null);
   const filePickerRef = useRef<HTMLInputElement>(null);
   const brandRef = useRef<HTMLSelectElement>(null);
-  const modelRef = useRef<HTMLInputElement>(null);
-  const trimRef = useRef<HTMLInputElement>(null);
+  const modelRef = useRef<HTMLSelectElement>(null);
+  const trimRef = useRef<HTMLSelectElement>(null);
   const mileageRef = useRef<HTMLInputElement>(null);
   const yearRef = useRef<HTMLInputElement>(null);
   const monthRef = useRef<HTMLInputElement>(null);
 
   const [selectedCategory, setSelectedCategory] = useState<string>(item.category as string);
   const [errors, setErrors] = useState<z.inferFormattedError<typeof itemSchema>>();
+  const [brands, setBrands] = useState<{value: string, label: string}[]>([]);
+  const [models, setModels] = useState<{value: string, label: string}[]>([]);
+  const [trims, setTrims] = useState<{value: string, label: string}[]>([]);
+  const [selectedModel, setSelectedModel] = useState<string>(item.model || '');
+  const [userId, setUserId] = useState<string | null>(null);
 
   const isMotori = MOTORI_CATEGORIES.includes(selectedCategory);
+
+  useEffect(() => {
+    if (isMotori) {
+      window.getCookies().then((data: any) => {
+        if (data?.userId) {
+          setUserId(data.userId);
+        }
+      });
+    }
+  }, [isMotori, selectedCategory]);
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     setErrors(undefined);
@@ -161,14 +177,77 @@ const Item = () => {
               {/* CAMPI MOTORI */}
               {isMotori && (
                 <>
-                  <SelectInput ref={brandRef} label="Marca" name="brand" defaultValue={item.brand || ''} required={true} errors={undefined}>
-                    <option value="" disabled>Seleziona la marca</option>
-                    {(['2'].includes(selectedCategory) ? AUTO_BRANDS : MOTO_BRANDS).map(brand => (
-                      <option key={brand} value={brand}>{brand}</option>
-                    ))}
-                  </SelectInput>                 
-                  <TextInput ref={modelRef} name="model" label="Modello" defaultValue={item.model} placeholder="Es. Punto" required />
-                  <TextInput ref={trimRef} name="trim" label="Allestimento" defaultValue={item.trim} placeholder="Es. Sport" required={false} />
+                  <div className="mb-4.5">
+                    <label className="mb-2.5 block text-black dark:text-white">Marca *</label>
+                    <select
+                      ref={brandRef}
+                      name="brand"
+                      defaultValue={item.brand || ''}
+                      onChange={async (e) => {
+                        const brandCode = e.target.value;
+                        console.log('Brand changed:', brandCode, 'userId:', userId);
+                        if (brandCode && userId) {
+                          const config = await fetchCategoryConfig(userId, selectedCategory, brandCode);
+                          console.log('Models received:', config.models?.length);
+                          setModels(config.models || []);
+                          setTrims([]);
+                        }
+                      }}
+                      className="w-full rounded border-[1.5px] border-stroke bg-transparent py-3 px-5 font-medium outline-none transition focus:border-primary active:border-primary dark:border-form-strokedark dark:bg-form-input dark:focus:border-primary"
+                    >
+                      <option value="">Seleziona la marca</option>
+                      {(selectedCategory === '2' ? AUTO_BRANDS : MOTO_BRANDS).map(b => (
+                        <option key={b.value} value={b.value}>{b.label}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {models.length > 0 && (
+                    <div className="mb-4.5">
+                      <label className="mb-2.5 block text-black dark:text-white">Modello *</label>
+                      <select
+                        ref={modelRef}
+                        name="model"
+                        value={selectedModel}
+                        onChange={async (e) => {
+                          console.log('MODEL ONCHANGE FIRED', e.target.value);
+                          const modelCode = e.target.value;
+                          setSelectedModel(modelCode);
+                          if (modelCode && userId) {
+                            const brandCode = brandRef?.current?.value;
+                            console.log('Model changed:', modelCode, 'brand:', brandCode);
+                            const config = await fetchCategoryConfig(userId, selectedCategory, brandCode, modelCode);
+                            console.log('Trims received:', config.trims?.length, config.trims);
+                            setTrims(config.trims || []);
+                          }
+                        }}
+                        className="w-full rounded border-[1.5px] border-stroke bg-transparent py-3 px-5 font-medium outline-none transition focus:border-primary active:border-primary dark:border-form-strokedark dark:bg-form-input dark:focus:border-primary"
+                      >
+                        <option value="">Seleziona il modello</option>
+                        {models.map(m => (
+                          <option key={m.value} value={m.value}>{m.label}</option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
+
+                  {trims.length > 0 && (
+                    <div className="mb-4.5">
+                      <label className="mb-2.5 block text-black dark:text-white">Allestimento</label>
+                      <select
+                        ref={trimRef}
+                        name="trim"
+                        defaultValue={item.trim || ''}
+                        className="w-full rounded border-[1.5px] border-stroke bg-transparent py-3 px-5 font-medium outline-none transition focus:border-primary active:border-primary dark:border-form-strokedark dark:bg-form-input dark:focus:border-primary"
+                      >
+                        <option value="">Seleziona l'allestimento</option>
+                        {trims.map(t => (
+                          <option key={t.value} value={t.value}>{t.label}</option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
+
                   <TextInput ref={mileageRef} name="mileage" label="Chilometraggio (km)" defaultValue={item.mileage} placeholder="Es. 50000" required type="number" />
                   <TextInput ref={yearRef} name="year" label="Anno di immatricolazione" defaultValue={item.year} placeholder="Es. 2018" required />
                   <TextInput ref={monthRef} name="month" label="Mese di immatricolazione" defaultValue={item.month} placeholder="Es. 3" required />

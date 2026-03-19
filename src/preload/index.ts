@@ -47,6 +47,12 @@ if (process.contextIsolated) {
     contextBridge.exposeInMainWorld('deleteItem', (itemId: string) =>
       ipcRenderer.invoke(IPC_CHANNELS.DELETE_ITEM, itemId)
     );
+    contextBridge.exposeInMainWorld('getCookies', () =>
+      ipcRenderer.invoke(IPC_CHANNELS.GET_COOKIES)
+    );
+    contextBridge.exposeInMainWorld('fetchVehicleConfig', (userId: string, categoryId: string, brandCode?: string, modelCode?: string) =>
+      ipcRenderer.invoke(IPC_CHANNELS.FETCH_VEHICLE_CONFIG, userId, categoryId, brandCode, modelCode)
+    );
   } catch (error) {
     console.error(error);
   }

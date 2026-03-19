@@ -18,5 +18,7 @@ declare global {
     updateItem: (item: Item) => Promise<boolean>;
     cloneItem: (itemId: string) => Promise<void>;
     deleteItem: (itemId: string) => Promise<void>;
+    getCookies: () => Promise<{ userId: string | null; cookies: any[] }>;
+    fetchVehicleConfig: (userId: string, categoryId: string, brandCode?: string, modelCode?: string) => Promise<any>;
   }
 }
