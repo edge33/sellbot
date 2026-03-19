@@ -15,6 +15,7 @@ import {
   COMPUTER_SCIENCE_TYPE
 } from './schema';
 import getOptionsForCategory from './getOptionsForCategory';
+import { AUTO_BRANDS, MOTO_BRANDS } from './carData';
 
 const MOTORI_CATEGORIES = ['2', '3', '4', '22', '34'];
 
@@ -48,7 +49,7 @@ const Item = () => {
   const dimensionRef = useRef<HTMLSelectElement>(null);
   const typeRef = useRef<HTMLSelectElement>(null);
   const filePickerRef = useRef<HTMLInputElement>(null);
-  const brandRef = useRef<HTMLInputElement>(null);
+  const brandRef = useRef<HTMLSelectElement>(null);
   const modelRef = useRef<HTMLInputElement>(null);
   const trimRef = useRef<HTMLInputElement>(null);
   const mileageRef = useRef<HTMLInputElement>(null);
@@ -160,7 +161,12 @@ const Item = () => {
               {/* CAMPI MOTORI */}
               {isMotori && (
                 <>
-                  <TextInput ref={brandRef} name="brand" label="Marca" defaultValue={item.brand} placeholder="Es. FIAT" required />
+                  <SelectInput ref={brandRef} label="Marca" name="brand" defaultValue={item.brand || ''} required={true} errors={undefined}>
+                    <option value="" disabled>Seleziona la marca</option>
+                    {(['2'].includes(selectedCategory) ? AUTO_BRANDS : MOTO_BRANDS).map(brand => (
+                      <option key={brand} value={brand}>{brand}</option>
+                    ))}
+                  </SelectInput>                 
                   <TextInput ref={modelRef} name="model" label="Modello" defaultValue={item.model} placeholder="Es. Punto" required />
                   <TextInput ref={trimRef} name="trim" label="Allestimento" defaultValue={item.trim} placeholder="Es. Sport" required={false} />
                   <TextInput ref={mileageRef} name="mileage" label="Chilometraggio (km)" defaultValue={item.mileage} placeholder="Es. 50000" required type="number" />
