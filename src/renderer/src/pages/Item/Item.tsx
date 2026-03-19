@@ -16,7 +16,7 @@ import {
 } from './schema';
 import getOptionsForCategory from './getOptionsForCategory';
 
-const MOTORI_CATEGORIES = ['2', '3', '4', '5', '22', '34', '36'];
+const MOTORI_CATEGORIES = ['2', '3', '4', '22', '34', '36'];
 
 export async function loader({ params }) {
   const item = await window.getItem(params.item);

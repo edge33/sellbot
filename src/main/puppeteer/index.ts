@@ -150,7 +150,7 @@ const doInsertItem = async (
   await delay(ACTION_TIMEOUT);
 
   // --- CAMPI SPECIFICI PER CATEGORIA ---
-  const isMotori = ['2', '3', '4', '5', '22', '34', '36'].includes(item.category);
+  const isMotori = ['2', '3', '4', '22', '34', '36'].includes(item.category);
 
   if (!isMotori) {
     // --- CONDITION (solo per Informatica e simili) ---
