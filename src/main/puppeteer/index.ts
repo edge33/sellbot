@@ -215,28 +215,32 @@ const doInsertItem = async (
     }
 
     if (item.model) {
-      // Il react-select del modello appare dopo aver selezionato la marca
+      const modelSelectId = item.category === '2' ? 'react-select-12-input' : 'react-select-5-input';
       const modelInput = await puppeteerPage.waitForSelector(
-        '#react-select-12-input', { timeout: 5000 }
+        `#${modelSelectId}`, { timeout: 5000 }
       ).catch(() => null);
-      await modelInput?.click();
-      await delay(500);
-      await modelInput?.type(item.model);
-      await delay(1000);
-      const modelOption = await puppeteerPage.waitForSelector(
-        '[class*="option__"]', { timeout: 5000 }
-      ).catch(() => null);
-      if (modelOption) {
-        await modelOption.click();
-        webContents.send('log', 'set model');
-      } else {
-        webContents.send('log', 'ERROR: model option not found');
+      if (modelInput) {
+        await modelInput.click();
+        await delay(500);
+        await modelInput.type(item.model);
+        await delay(1000);
+        const modelOption = await puppeteerPage.waitForSelector(
+          '[class*="option__"]', { timeout: 5000 }
+        ).catch(() => null);
+        if (modelOption) {
+          await modelOption.click();
+          webContents.send('log', 'set model');
+        } else {
+          webContents.send('log', 'ERROR: model option not found');
+        }
+        await delay(ACTION_TIMEOUT);
       }
-      await delay(ACTION_TIMEOUT);
     }
+
     if (item.trim) {
+      const trimSelectId = item.category === '2' ? 'react-select-13-input' : 'react-select-6-input';
       const trimInput = await puppeteerPage.waitForSelector(
-        '#react-select-13-input', { timeout: 5000 }
+        `#${trimSelectId}`, { timeout: 5000 }
       ).catch(() => null);
       if (trimInput) {
         await trimInput.click();
