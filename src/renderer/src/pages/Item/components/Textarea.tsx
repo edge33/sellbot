@@ -13,6 +13,7 @@ const TextArea = forwardRef<HTMLTextAreaElement, TextAreaProps>(
           ref={ref}
           name={name}
           rows={6}
+          minLength={15}
           maxLength={2000}
           defaultValue={defaultValue}
           placeholder={placeholder}

@@ -169,7 +169,7 @@ const Item = () => {
                 </optgroup>
               </SelectInput>
 
-              <TextInput ref={titleRef} name="title" label="Titolo" defaultValue={item.title} placeholder="Titolo" required />
+              <TextInput ref={titleRef} name="title" label="Titolo" defaultValue={item.title} placeholder="Titolo (min 5, max 50 caratteri)" required minLength={5} maxLength={50} />
               <TextArea ref={descriptionRef} label="Descrizione" name="description" defaultValue={item.description} placeholder="Descrizione oggetto" />
               <TextInput ref={priceRef} name="price" defaultValue={item.price} placeholder="99" label="Prezzo" required type="number" />
 
@@ -294,9 +294,12 @@ const Item = () => {
                     ))}
                   </div>
                 )}
-                <input name="pictures" ref={filePickerRef} multiple type="file"
+                <input name="pictures" ref={filePickerRef} multiple type="file" accept=".jpg,.jpeg,.png,.gif,.bmp,.webp"
                   className="w-full rounded-md border border-stroke p-3 outline-none transition file:mr-4 file:rounded file:border-[0.5px] file:border-stroke file:bg-[#EEEEEE] file:py-1 file:px-2.5 file:text-sm focus:border-primary file:focus:border-primary active:border-primary disabled:cursor-default disabled:bg-whiter dark:border-form-strokedark dark:bg-form-input dark:file:border-strokedark dark:file:bg-white/30 dark:file:text-white"
                 />
+                <p className="mt-2 text-sm text-gray-500 dark:text-gray-400">
+                  Formati accettati: JPG, JPEG, PNG, GIF, BMP, WEBP. Massimo 6 immagini.
+                </p>
               </div>
 
               <button type="submit" className="flex w-full justify-center rounded bg-primary p-3 font-medium text-gray hover:bg-opacity-90">
