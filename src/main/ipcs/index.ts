@@ -71,11 +71,14 @@ const ipcs = (mainWindow: BrowserWindow) => {
       .map((c: any) => `${c.name}=${c.value}`)
       .join('; ');
 
+    const isMoto = ['3', '36', '22', '34', '4'].includes(categoryId);
+    const brandParam = isMoto ? 'bikebrand' : 'carbrand';
+    const modelParam = isMoto ? 'bikemodel' : 'carmodel';
+
     const url = brandCode && modelCode
-    
-      ? `https://hades.subito.it/v1/insertion/user/${userId}/configuration/category/${categoryId}?type=sell&carbrand=${brandCode}&carmodel=${modelCode}`
+      ? `https://hades.subito.it/v1/insertion/user/${userId}/configuration/category/${categoryId}?type=sell&${brandParam}=${brandCode}&${modelParam}=${modelCode}`
       : brandCode
-      ? `https://hades.subito.it/v1/insertion/user/${userId}/configuration/category/${categoryId}?type=sell&carbrand=${brandCode}`
+      ? `https://hades.subito.it/v1/insertion/user/${userId}/configuration/category/${categoryId}?type=sell&${brandParam}=${brandCode}`
       : `https://hades.subito.it/v1/insertion/user/${userId}/configuration/category/${categoryId}?type=sell`;
 
     console.log('brandCode:', brandCode, 'modelCode:', modelCode);
