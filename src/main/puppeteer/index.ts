@@ -2,6 +2,7 @@ import { WebContents } from 'electron';
 import puppeteer, { Browser, ElementHandle, Page } from 'puppeteer-core';
 import { getAppSettings, getSettings, storeCookies } from '../settings';
 import { getItem } from '../items';
+import { AUTO_BRANDS, MOTO_BRANDS } from '../../renderer/src/pages/Item/carData';
 
 let isRunning = false;
 let puppeteerBrowser: Browser;
@@ -200,7 +201,9 @@ const doInsertItem = async (
       const brandInput = await puppeteerPage.$('#react-select-2-input');
       await brandInput?.click();
       await delay(500);
-      await brandInput?.type(item.brand);
+      const allBrands = [...AUTO_BRANDS, ...MOTO_BRANDS];
+      const brandLabel = allBrands.find(b => b.value === item.brand)?.label || item.brand;
+      await brandInput?.type(brandLabel);
       await delay(1000);
       const brandOption = await puppeteerPage.waitForSelector(
         '[class*="option__"]', { timeout: 5000 }

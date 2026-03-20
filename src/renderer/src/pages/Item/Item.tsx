@@ -59,7 +59,6 @@ const Item = () => {
 
   const [selectedCategory, setSelectedCategory] = useState<string>(item.category as string);
   const [errors, setErrors] = useState<z.inferFormattedError<typeof itemSchema>>();
-  const [brands, setBrands] = useState<{value: string, label: string}[]>([]);
   const [models, setModels] = useState<{value: string, label: string}[]>([]);
   const [trims, setTrims] = useState<{value: string, label: string}[]>([]);
   const [selectedModel, setSelectedModel] = useState<string>(item.model || '');
