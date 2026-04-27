@@ -9,6 +9,7 @@ type ActionButtonProps = {
   cloneItem: (itemId: string) => Promise<void>;
   deleteItem: (item: string) => Promise<void>;
   removeListing: (item: string) => Promise<void>;
+  disabled?: boolean;
 };
 
 enum ACTION {
@@ -21,7 +22,8 @@ const ActionButtons = ({
   insertItem,
   cloneItem,
   deleteItem,
-  removeListing
+  removeListing,
+  disabled
 }: ActionButtonProps) => {
   const [actionToPerform, setActionToPerform] = useState<ACTION>();
 
@@ -51,7 +53,8 @@ const ActionButtons = ({
       {!actionToPerform && (
         <Tooltip text="Inserisci su subito">
           <button
-            className="hover:text-primary"
+            className={`hover:text-primary ${disabled ? 'opacity-40 cursor-not-allowed pointer-events-none' : ''}`}
+            disabled={disabled}
             onClick={() => {
               insertItem(itemId);
             }}

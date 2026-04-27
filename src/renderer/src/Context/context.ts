@@ -15,7 +15,8 @@ const SettingsContext = React.createContext<SettingsContextType>({
     cookiesStored: false,
     mobilePhone: '',
     chromiumPath: '',
-    itemsPath: ''
+    itemsPath: '',
+    geminiApiKey: ''
   },
   loading: true,
   updateConfig: () => {}

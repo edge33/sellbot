@@ -1,7 +1,7 @@
 import PrimaryButton from '@renderer/ui/buttons/PrimaryButton';
 import { Item } from '@shared/types';
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useRevalidator } from 'react-router-dom';
 import ActionButtons from './ActionButtons';
 
 const getItemCategory = (category: string) => {
@@ -30,14 +30,31 @@ type ItemsTableProps = {
 
 const ItemsTable = ({ items }: ItemsTableProps) => {
   const [itemsToInsert, setItemsToInsert] = useState<Set<string>>(new Set());
+  const [loadingOp, setLoadingOp] = useState<string | null>(null);
   const navigate = useNavigate();
+  const { revalidate } = useRevalidator();
+
+  const withLoading = async (label: string, fn: () => Promise<void>) => {
+    setLoadingOp(label);
+    try {
+      await fn();
+    } finally {
+      setLoadingOp(null);
+    }
+  };
 
   const handleInsertItemClick = async (filePath: string) => {
-    await window.insertItems([filePath]);
+    await withLoading('Inserimento annuncio...', async () => {
+      await window.insertItems([filePath]);
+      revalidate();
+    });
   };
 
   const handleInsertAllItems = async () => {
-    await window.insertItems(Array.from(itemsToInsert.values()));
+    await withLoading('Inserimento annunci...', async () => {
+      await window.insertItems(Array.from(itemsToInsert.values()));
+      revalidate();
+    });
   };
 
   const handleCloneItem = async (itemId: string) => {
@@ -51,7 +68,34 @@ const ItemsTable = ({ items }: ItemsTableProps) => {
   };
 
   const handleRemoveListing = async (itemId: string) => {
-    await window.removeListings([itemId]);
+    await withLoading('Rimozione annuncio...', async () => {
+      await window.removeListings([itemId]);
+      revalidate();
+    });
+  };
+
+  const handleRemoveAllListings = async () => {
+    await withLoading('Rimozione annunci...', async () => {
+      await window.removeListings(Array.from(itemsToInsert.values()));
+      revalidate();
+    });
+  };
+
+  const handleCheckAllStatus = async () => {
+    await withLoading('Controllo stato annunci...', async () => {
+      const allIds = items.map(({ id }) => id as string);
+      await window.checkItemsStatus(allIds);
+      revalidate();
+    });
+  };
+
+  const handleFetchStats = async () => {
+    const allIds = items.filter((i) => i.id).map((i) => i.id as string);
+    if (allIds.length === 0) return;
+    await withLoading('Aggiornamento stats...', async () => {
+      await window.fetchItemsStats(allIds);
+      revalidate();
+    });
   };
 
   const allSelected = items.every(({ id }) => itemsToInsert.has(id as string));
@@ -63,7 +107,7 @@ const ItemsTable = ({ items }: ItemsTableProps) => {
           <h4 className="text-xl font-semibold text-black dark:text-white">Prodotti</h4>
         </div>
         <div className="max-w-full overflow-x-auto">
-          <div className="grid grid-cols-8 border-t border-stroke py-4.5 px-4 dark:border-strokedark sm:grid-cols-8 md:px-6 2xl:px-7.5">
+          <div className="grid grid-cols-11 border-t border-stroke py-4.5 px-4 dark:border-strokedark sm:grid-cols-11 md:px-6 2xl:px-7.5">
             <div className="col-span-1 flex items-center">
               <p className="font-medium">Selezione</p>
             </div>
@@ -76,15 +120,21 @@ const ItemsTable = ({ items }: ItemsTableProps) => {
             <div className="col-span-1 flex items-center">
               <p className="font-medium">Prezzo</p>
             </div>
+            <div className="col-span-1 flex items-center">
+              <p className="font-medium">Stato</p>
+            </div>
+            <div className="col-span-2 flex items-center">
+              <p className="font-medium">Stats</p>
+            </div>
             <div className="col-span-2 flex items-center">
               <p className="font-medium">Azioni</p>
             </div>
           </div>
 
-          {items.map((item, key) => (
+          {items.map((item) => (
             <div
-              className="grid grid-cols-8 border-t border-stroke py-4.5 px-4 dark:border-strokedark sm:grid-cols-8 md:px-6 2xl:px-7.5"
-              key={key}
+              className="grid grid-cols-11 border-t border-stroke py-4.5 px-4 dark:border-strokedark sm:grid-cols-11 md:px-6 2xl:px-7.5"
+              key={item.id}
             >
               <div className="col-span-1 flex items-center justify-center">
                 <div>
@@ -151,7 +201,59 @@ const ItemsTable = ({ items }: ItemsTableProps) => {
                 </p>
               </div>
               <div className="col-span-1 flex items-center">
-                <p className="text-sm text-black dark:text-white">${item.price}</p>
+                <p className="text-sm text-black dark:text-white">€{item.price}</p>
+              </div>
+              <div className="col-span-1 flex items-center">
+                {item.isOnline === true ? (
+                  <span className="inline-flex items-center gap-1.5 rounded-full bg-success px-2.5 py-1 text-xs font-medium text-white">
+                    <span className="h-1.5 w-1.5 rounded-full bg-white"></span>Online
+                  </span>
+                ) : item.isOnline === false ? (
+                  <span className="inline-flex items-center gap-1.5 rounded-full bg-danger px-2.5 py-1 text-xs font-medium text-white">
+                    <span className="h-1.5 w-1.5 rounded-full bg-white"></span>Offline
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center gap-1.5 rounded-full bg-gray-300 px-2.5 py-1 text-xs font-medium text-gray-600 dark:bg-meta-4 dark:text-white">
+                    <span className="h-1.5 w-1.5 rounded-full bg-gray-500"></span>—
+                  </span>
+                )}
+              </div>
+              <div className="col-span-2 flex flex-col gap-1">
+                {item.stats ? (
+                  <>
+                    <div className="flex items-center gap-3">
+                      {item.stats.position && (
+                        <span className={`text-sm font-semibold px-2 py-0.5 rounded ${
+                          item.stats.position === '1°' ? 'bg-success text-white' :
+                          ['2°', '3°'].includes(item.stats.position) ? 'bg-warning text-white' :
+                          'bg-danger text-white'
+                        }`}>
+                          📄 {item.stats.position}
+                        </span>
+                      )}
+                      {item.stats.views !== undefined && (
+                        <span className="text-sm text-black dark:text-white">👁 {item.stats.views}</span>
+                      )}
+                      {item.stats.messages !== undefined && (
+                        <span className="text-sm text-black dark:text-white">✉ {item.stats.messages}</span>
+                      )}
+                    </div>
+                    {item.stats.lastChecked && (
+                      <span className="text-xs text-gray-400 dark:text-gray-500">
+                        {(() => {
+                          const diff = Math.floor((Date.now() - new Date(item.stats.lastChecked).getTime()) / 60000);
+                          if (diff < 1) return 'aggiornato ora';
+                          if (diff < 60) return `aggiornato ${diff} min fa`;
+                          const h = Math.floor(diff / 60);
+                          if (h < 24) return `aggiornato ${h}h fa`;
+                          return `aggiornato il ${new Date(item.stats.lastChecked).toLocaleDateString('it-IT')}`;
+                        })()}
+                      </span>
+                    )}
+                  </>
+                ) : (
+                  <span className="text-sm text-gray-400">—</span>
+                )}
               </div>
               <div className="col-span-2 flex items-center gap-7.5">
                 <ActionButtons
@@ -160,6 +262,7 @@ const ItemsTable = ({ items }: ItemsTableProps) => {
                   insertItem={handleInsertItemClick}
                   deleteItem={handleDeleteItem}
                   removeListing={handleRemoveListing}
+                  disabled={!!loadingOp}
                 />
               </div>
             </div>
@@ -167,6 +270,15 @@ const ItemsTable = ({ items }: ItemsTableProps) => {
         </div>
       </div>
       <div className="py-6 px-4 md:px-6 xl:px-7.5">
+        {loadingOp && (
+          <div className="flex items-center gap-2 mb-4 text-sm text-white bg-meta-3 rounded-md px-4 py-2 w-fit">
+            <svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+            </svg>
+            {loadingOp}
+          </div>
+        )}
         <div className="flex items-left items-center gap-7.5">
           <div>
             <label
@@ -186,7 +298,7 @@ const ItemsTable = ({ items }: ItemsTableProps) => {
                     const newItemstoInsert = new Set(items.map(({ id }) => id as string));
                     setItemsToInsert(newItemstoInsert);
                   }}
-                  checked={true}
+                  checked={allSelected}
                 />
                 <div
                   className={`mr-4 flex h-5 w-5 items-center justify-center rounded border ${
@@ -200,10 +312,24 @@ const ItemsTable = ({ items }: ItemsTableProps) => {
             </label>
           </div>
           <PrimaryButton
-            action={() => {
-              handleInsertAllItems();
-            }}
+            action={() => { handleInsertAllItems(); }}
             label="Inserisci selezionati"
+            disabled={!!loadingOp}
+          />
+          <PrimaryButton
+            action={() => { handleRemoveAllListings(); }}
+            label="Elimina selezionati"
+            disabled={!!loadingOp}
+          />
+          <PrimaryButton
+            action={() => { handleCheckAllStatus(); }}
+            label="Controlla stato annunci"
+            disabled={!!loadingOp}
+          />
+          <PrimaryButton
+            action={() => { handleFetchStats(); }}
+            label="Aggiorna stats"
+            disabled={!!loadingOp}
           />
         </div>
       </div>

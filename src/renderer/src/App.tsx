@@ -13,6 +13,8 @@ import Settings from './pages/Settings';
 import DefaultLayout from './ui/layout/DefaultLayout';
 import { AppSettings } from '@shared/types';
 import Item, { loader as itemLoader } from './pages/Item/Item';
+import SchedulePage from './pages/Schedule/Schedule';
+import TrashPage from './pages/Trash/Trash';
 
 const isMissingConfig = (appSettings: AppSettings) => {
   if (!appSettings) {
@@ -54,6 +56,24 @@ function App() {
               <>
                 <PageTitle title="Item | Sellbot" />
                 <Item />
+              </>
+            }
+          />
+          <Route
+            path="/schedule"
+            element={
+              <>
+                <PageTitle title="Pianificazione | Sellbot" />
+                <SchedulePage />
+              </>
+            }
+          />
+          <Route
+            path="/trash"
+            element={
+              <>
+                <PageTitle title="Cestino | Sellbot" />
+                <TrashPage />
               </>
             }
           />

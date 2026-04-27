@@ -33,7 +33,11 @@ const getAppSettings = (): AppSettings | undefined => {
     chromiumPath: settings?.chromiumPath,
     cookiesStored: settings?.cookies?.length > 0,
     itemsPath: settings?.itemsPath,
-    mobilePhone: settings?.mobilePhone
+    mobilePhone: settings?.mobilePhone,
+    location: settings?.location,
+    geminiApiKey: settings?.geminiApiKey,
+    descriptionSettings: settings?.descriptionSettings,
+    statsRefreshHours: settings?.statsRefreshHours
   };
 };
 

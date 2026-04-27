@@ -1,7 +1,7 @@
-import { useRef, useState } from 'react';
+import { useRef, useState, useEffect } from 'react';
 import Breadcrumb from '../components/Breadcrumbs/Breadcrumb';
 import { useSettingsContext } from '../Context/context';
-import { AppSettings } from '@shared/types';
+import { AppSettings, DescriptionSettings } from '@shared/types';
 
 type ErrorState = { [K in keyof AppSettings]?: string };
 
@@ -9,11 +9,68 @@ const Settings = () => {
   const inputItemsPathRef = useRef<HTMLInputElement>(null);
   const inputChromiumPathRef = useRef<HTMLInputElement>(null);
   const inputMobilePhoneRef = useRef<HTMLInputElement>(null);
+  const inputLocationRef = useRef<HTMLInputElement>(null);
+  const inputAnthropicApiKeyRef = useRef<HTMLInputElement>(null);
 
   const [errorState, setErrorState] = useState<ErrorState>({});
   const { appSettings, updateConfig } = useSettingsContext();
 
-  const { cookiesStored, itemsPath, chromiumPath, mobilePhone } = appSettings;
+  const { cookiesStored, itemsPath, chromiumPath, mobilePhone, location, geminiApiKey, descriptionSettings } = appSettings;
+
+  const defaultDescSettings: DescriptionSettings = {
+    sections: { intro: true, specs: true, usage: true, condition: false, shipping: false, cta: false },
+    tone: 'neutro',
+    length: 'media',
+    extraInstructions: ''
+  };
+  const [descSettings, setDescSettings] = useState<DescriptionSettings>(
+    descriptionSettings ?? defaultDescSettings
+  );
+  const [descSaved, setDescSaved] = useState(false);
+
+  useEffect(() => {
+    if (descriptionSettings) {
+      setDescSettings(descriptionSettings);
+    }
+  }, [descriptionSettings]);
+
+  const handleDescSectionToggle = (key: keyof DescriptionSettings['sections']) => {
+    setDescSettings((prev) => ({
+      ...prev,
+      sections: { ...prev.sections, [key]: !prev.sections[key] }
+    }));
+  };
+
+  const handleDescSave = async () => {
+    console.log('[Settings] Saving descSettings:', JSON.stringify(descSettings));
+    await window.storeSettings({ descriptionSettings: descSettings });
+    updateConfig();
+    setDescSaved(true);
+    setTimeout(() => setDescSaved(false), 2500);
+  };
+
+  const handleExport = async () => {
+    const result = await window.exportItems();
+    if (result?.success) alert('Annunci esportati con successo!');
+  };
+
+  const handleImport = async () => {
+    const result = await window.importItems();
+    if (result?.success) {
+      alert(`Importati ${result.count} annunci con successo!`);
+      updateConfig();
+    } else if (result?.error) {
+      alert(`Errore importazione: ${result.error}`);
+    }
+  };
+
+  const handleGeminiKeySave = async () => {
+    const key = inputAnthropicApiKeyRef.current?.value?.trim();
+    if (!key) return;
+    await window.storeSettings({ geminiApiKey: key });
+    updateConfig();
+    alert('Chiave API salvata!');
+  };
 
   const handlePathSave = async () => {
     const itemsPathValue_ = inputItemsPathRef.current?.value;
@@ -58,7 +115,7 @@ const Settings = () => {
       }));
       return;
     } else {
-      setErrorState((errorState) => ({ ...errorState, itemsPath: undefined }));
+      setErrorState((errorState) => ({ ...errorState, mobilePhone: undefined }));
     }
 
     const mobilePhoneValue = mobilePhoneValue_;
@@ -67,7 +124,9 @@ const Settings = () => {
       await window.storeSettings({
         itemsPath: itemsPathValue,
         chromiumPath: chromiumPathValue,
-        mobilePhone: mobilePhoneValue
+        mobilePhone: mobilePhoneValue,
+        location: inputLocationRef.current?.value?.trim() || location,
+        geminiApiKey: inputAnthropicApiKeyRef.current?.value || geminiApiKey
       });
     } catch (err) {
       console.log(err);
@@ -84,6 +143,10 @@ const Settings = () => {
 
   if (mobilePhone && inputMobilePhoneRef.current) {
     inputMobilePhoneRef.current.value = mobilePhone;
+  }
+
+  if (location && inputLocationRef.current) {
+    inputLocationRef.current.value = location;
   }
 
   const openWebsite = async () => {
@@ -298,6 +361,56 @@ const Settings = () => {
                       </div>
                     </div>
                   )}
+                  <div className="mb-5.5">
+                    <label
+                      className="mb-3 block text-sm font-medium text-black dark:text-white"
+                      htmlFor="location"
+                    >
+                      Città annunci
+                    </label>
+                    <input
+                      ref={inputLocationRef}
+                      className="w-full rounded border border-stroke bg-gray py-3 px-4.5 text-black focus:border-primary focus-visible:outline-none dark:border-strokedark dark:bg-meta-4 dark:text-white dark:focus:border-primary"
+                      type="text"
+                      name="location"
+                      id="location"
+                      placeholder="es. Roma"
+                      defaultValue={location}
+                    />
+                  </div>
+
+                  <div className="mb-5.5">
+                    <label className="mb-3 block text-sm font-medium text-black dark:text-white" htmlFor="geminiApiKey">
+                      Chiave API Groq (gratuita){' '}
+                      {!geminiApiKey && <><span className="text-[#B45454]">Non configurata</span></>}
+                     </label>
+                     <input
+                       ref={inputAnthropicApiKeyRef}
+                       className="w-full rounded border border-stroke bg-gray py-3 px-4.5 text-black focus:border-primary focus-visible:outline-none dark:border-strokedark dark:bg-meta-4 dark:text-white dark:focus:border-primary"
+                       type="password"
+                       name="geminiApiKey"
+                       id="geminiApiKey"
+                       placeholder="gsk_..."
+                       defaultValue={geminiApiKey}
+                     />
+                     <p className="mt-2 text-sm text-gray-500">
+                       Non hai una chiave?{' '}
+                       <button
+                         type="button"
+                         onClick={() => window.openExternal('https://console.groq.com/keys')}
+                         className="text-primary hover:underline font-medium"
+                       >
+                         Creala gratis su console.groq.com →
+                       </button>
+                     </p>
+                     <button
+                       type="button"
+                       onClick={handleGeminiKeySave}
+                       className="mt-2 flex justify-center rounded bg-primary py-2 px-6 font-medium text-gray hover:bg-opacity-90"
+                     >
+                       Salva chiave
+                     </button>
+                  </div>
                   <div className="flex gap-4.5">
                     <button
                       className="flex justify-center rounded bg-primary py-2 px-6 font-medium text-gray hover:bg-opacity-90"
@@ -307,6 +420,177 @@ const Settings = () => {
                     </button>
                   </div>
                 </form>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Sezione Gestione dati */}
+        <div className="grid grid-cols-5 gap-8 mt-7.5">
+          <div className="col-span-5">
+            <div className="rounded-sm border border-stroke bg-white shadow-default dark:border-strokedark dark:bg-boxdark">
+              <div className="border-b border-stroke py-4 px-7 dark:border-strokedark">
+                <h3 className="font-medium text-black dark:text-white">Gestione dati</h3>
+              </div>
+              <div className="p-7">
+                <p className="mb-4 text-sm text-gray-500 dark:text-gray-400">
+                  Esporta tutti gli annunci (con foto) in un archivio ZIP, o importa annunci da un archivio precedentemente esportato.
+                </p>
+                <div className="flex gap-4.5">
+                  <button
+                    type="button"
+                    onClick={handleExport}
+                    className="flex justify-center rounded bg-primary py-2 px-6 font-medium text-gray hover:bg-opacity-90"
+                  >
+                    Esporta annunci
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleImport}
+                    className="flex justify-center rounded border border-stroke bg-white py-2 px-6 font-medium text-black hover:border-primary hover:text-primary dark:border-strokedark dark:bg-boxdark dark:text-white"
+                  >
+                    Importa annunci
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Sezione Statistiche automatiche */}
+        <div className="grid grid-cols-5 gap-8 mt-7.5">
+          <div className="col-span-5">
+            <div className="rounded-sm border border-stroke bg-white shadow-default dark:border-strokedark dark:bg-boxdark">
+              <div className="border-b border-stroke py-4 px-7 dark:border-strokedark">
+                <h3 className="font-medium text-black dark:text-white">Statistiche automatiche</h3>
+              </div>
+              <div className="p-7">
+                <p className="mb-4 text-sm text-gray-500 dark:text-gray-400">
+                  Aggiorna automaticamente le statistiche degli annunci online (posizione, visite, messaggi) ogni X ore. 0 = disabilitato.
+                </p>
+                <div className="flex items-center gap-4">
+                  <input
+                    type="number"
+                    min={0}
+                    defaultValue={appSettings.statsRefreshHours ?? 0}
+                    className="w-24 rounded border-[1.5px] border-stroke bg-transparent py-2 px-4 font-medium outline-none transition focus:border-primary dark:border-form-strokedark dark:bg-form-input"
+                    id="statsRefreshHours"
+                  />
+                  <span className="text-sm text-gray-500 dark:text-gray-400">ore (0 = disabilitato)</span>
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      const val = parseInt((document.getElementById('statsRefreshHours') as HTMLInputElement).value) || 0;
+                      await window.storeSettings({ statsRefreshHours: val });
+                      updateConfig();
+                    }}
+                    className="flex justify-center rounded bg-primary py-2 px-6 font-medium text-gray hover:bg-opacity-90"
+                  >
+                    Salva
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Sezione Generazione descrizione AI */}
+        <div className="grid grid-cols-5 gap-8 mt-7.5">
+          <div className="col-span-5">
+            <div className="rounded-sm border border-stroke bg-white shadow-default dark:border-strokedark dark:bg-boxdark">
+              <div className="border-b border-stroke py-4 px-7 dark:border-strokedark">
+                <h3 className="font-medium text-black dark:text-white">Generazione descrizione AI</h3>
+              </div>
+              <div className="p-7">
+
+                {/* Sezioni da includere */}
+                <div className="mb-5.5">
+                  <label className="mb-3 block text-sm font-medium text-black dark:text-white">
+                    Sezioni da includere
+                  </label>
+                  <div className="flex flex-col gap-2">
+                    {(
+                      [
+                        { key: 'intro', label: 'Introduzione ("Vendo [prodotto],")' },
+                        { key: 'specs', label: 'Specifiche tecniche' },
+                        { key: 'usage', label: 'Utilizzi pratici' },
+                        { key: 'condition', label: 'Stato / condizioni' },
+                        { key: 'shipping', label: 'Info spedizione / ritiro' },
+                        { key: 'cta', label: 'Call to action finale' },
+                      ] as { key: keyof DescriptionSettings['sections']; label: string }[]
+                    ).map(({ key, label }) => (
+                      <label key={key} className="flex items-center gap-2 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={descSettings.sections[key]}
+                          onChange={() => handleDescSectionToggle(key)}
+                          className="w-4 h-4 accent-primary"
+                        />
+                        <span className="text-sm text-black dark:text-white">{label}</span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Tono */}
+                <div className="mb-5.5">
+                  <label className="mb-3 block text-sm font-medium text-black dark:text-white">Tono</label>
+                  <select
+                    value={descSettings.tone}
+                    onChange={(e) => setDescSettings((prev) => ({ ...prev, tone: e.target.value as DescriptionSettings['tone'] }))}
+                    className="w-full rounded border border-stroke bg-gray py-3 px-4.5 text-black focus:border-primary focus-visible:outline-none dark:border-strokedark dark:bg-meta-4 dark:text-white dark:focus:border-primary"
+                  >
+                    <option value="neutro">Neutro</option>
+                    <option value="privato">Privato (come un amico)</option>
+                    <option value="colloquiale">Colloquiale</option>
+                    <option value="formale">Formale</option>
+                    <option value="vendita">Persuasivo (vendita)</option>
+                  </select>
+                </div>
+
+                {/* Lunghezza */}
+                <div className="mb-5.5">
+                  <label className="mb-3 block text-sm font-medium text-black dark:text-white">Lunghezza</label>
+                  <select
+                    value={descSettings.length}
+                    onChange={(e) => setDescSettings((prev) => ({ ...prev, length: e.target.value as DescriptionSettings['length'] }))}
+                    className="w-full rounded border border-stroke bg-gray py-3 px-4.5 text-black focus:border-primary focus-visible:outline-none dark:border-strokedark dark:bg-meta-4 dark:text-white dark:focus:border-primary"
+                  >
+                    <option value="breve">Breve (30–60 parole)</option>
+                    <option value="media">Media (80–150 parole)</option>
+                    <option value="dettagliata">Dettagliata (150–300 parole)</option>
+                  </select>
+                </div>
+
+                {/* Istruzioni extra */}
+                <div className="mb-5.5">
+                  <label className="mb-3 block text-sm font-medium text-black dark:text-white">
+                    Istruzioni aggiuntive
+                    <span className="ml-2 text-xs font-normal text-gray-500 dark:text-gray-400">
+                      (opzionale — es. "menziona sempre che accetto scambi")
+                    </span>
+                  </label>
+                  <textarea
+                    rows={3}
+                    value={descSettings.extraInstructions ?? ''}
+                    onChange={(e) => setDescSettings((prev) => ({ ...prev, extraInstructions: e.target.value }))}
+                    className="w-full rounded border border-stroke bg-gray py-3 px-4.5 text-black focus:border-primary focus-visible:outline-none dark:border-strokedark dark:bg-meta-4 dark:text-white dark:focus:border-primary"
+                    placeholder="Es: Sono disponibile per la spedizione. Accetto scambi con oggetti simili."
+                  />
+                </div>
+
+                <div className="flex items-center gap-4">
+                  <button
+                    type="button"
+                    onClick={handleDescSave}
+                    className="flex justify-center rounded bg-primary py-2 px-6 font-medium text-gray hover:bg-opacity-90"
+                  >
+                    Salva impostazioni descrizione
+                  </button>
+                  {descSaved && (
+                    <span className="text-sm font-medium text-success">✓ Salvato</span>
+                  )}
+                </div>
               </div>
             </div>
           </div>
