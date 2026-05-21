@@ -1,11 +1,35 @@
 import { z } from 'zod';
 
 export enum CATEGORY {
+  // Motori
+  CAR = '2',
+  MOTORBIKE = '3',
+  COMMERCIAL_VEHICLE = '4',
+  CAR_ACCESSORIES = '5',
+  BOAT = '22',
+  CARAVAN = '34',
+  MOTO_ACCESSORIES = '36',
+  // Elettronica
   COMPUTER_SCIENCE = '10',
-  VIDEOGAMES = '44',
   AUDIO_VIDEO = '11',
+  SMARTPHONES = '12',
   PHOTOGRAPHY = '40',
-  SMARTPHONES = '12'
+  VIDEOGAMES = '44',
+  // Casa
+  FURNITURE = '14',
+  GARDEN = '15',
+  APPLIANCES = '37',
+  // Abbigliamento, Sports, Hobby
+  CLOTHING = '16',
+  CHILDREN = '17',
+  MUSIC_FILM = '19',
+  SPORTS = '20',
+  COLLECTIBLES = '21',
+  BOOKS = '38',
+  MUSICAL_INSTRUMENTS = '39',
+  BICYCLES = '41',
+  // Animali
+  PET_ACCESSORIES = '100'
 }
 
 export enum CONDITION {

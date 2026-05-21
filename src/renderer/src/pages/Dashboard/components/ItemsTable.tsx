@@ -6,21 +6,30 @@ import ActionButtons from './ActionButtons';
 
 const getItemCategory = (category: string) => {
   switch (category) {
-    case '10': return 'Informatica';
-    case '44': return 'Console e videogiochi';
-    case '11': return 'Audio e video';
-    case '40': return 'Fotografia';
-    case '12': return 'Telefonia';
     case '2': return 'Auto';
-    case '5': return 'Accessori auto';
     case '3': return 'Moto e scooter';
-    case '36': return 'Accessori moto';
+    case '4': return 'Veicoli commerciali';
+    case '5': return 'Accessori auto';
+    case '10': return 'Informatica';
+    case '11': return 'Audio e video';
+    case '12': return 'Telefonia';
+    case '14': return 'Arredamento e Casalinghi';
+    case '15': return 'Giardino e Fai da te';
+    case '16': return 'Abbigliamento e Accessori';
+    case '17': return 'Tutto per i bambini';
+    case '19': return 'Musica e Film';
+    case '20': return 'Sports';
+    case '21': return 'Collezionismo';
     case '22': return 'Nautica';
     case '34': return 'Caravan e Camper';
-    case '4': return 'Veicoli commerciali';
-    case '14': return 'Arredamento e Casalinghi';
+    case '36': return 'Accessori moto';
     case '37': return 'Elettrodomestici';
-    case '15': return 'Giardino e Fai da te';
+    case '38': return 'Libri e Riviste';
+    case '39': return 'Strumenti Musicali';
+    case '40': return 'Fotografia';
+    case '41': return 'Biciclette';
+    case '44': return 'Console e videogiochi';
+    case '100': return 'Accessori per animali';
     default: return '';
   }
 };

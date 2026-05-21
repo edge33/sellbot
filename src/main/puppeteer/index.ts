@@ -297,13 +297,30 @@ const doInsertItem = async (
     }
 
     if (item.type) {
-      let typeInputName = 'computerType';
-      switch (item.category) {
-        case '10': typeInputName = 'computerType'; break;
-        case '11': typeInputName = 'audioVideoType'; break;
-        case '12': typeInputName = 'phoneType'; break;
-      }
+      // Mappa categoria → nome input del dropdown "type" su Subito
+      const TYPE_INPUT_BY_CATEGORY: Record<string, string> = {
+        '10': 'computerType',
+        '11': 'audioVideoType',
+        '12': 'phoneType',
+        '16': 'clothingType',
+        '17': 'childrenType',
+        '20': 'sportType',
+        '21': 'hobbyType',
+        '38': 'bookType',
+        '41': 'bicycleType'
+      };
+      const typeInputName = TYPE_INPUT_BY_CATEGORY[item.category] || 'computerType';
       await clickDropdownByInputName(typeInputName, item.type, 'type');
+    }
+
+    // --- ABBIGLIAMENTO: genere (cat 16) ---
+    if (item.category === '16' && item.clothingGender) {
+      await clickDropdownByInputName('clothingGender', item.clothingGender, 'clothingGender');
+    }
+
+    // --- TUTTO PER I BAMBINI: fascia d'età (cat 17) ---
+    if (item.category === '17' && item.childrenAge) {
+      await clickDropdownByInputName('childrenAge', item.childrenAge, 'childrenAge');
     }
   } else {
     // --- MOTORI: Marca, Chilometraggio, Anno, Mese ---

@@ -50,6 +50,11 @@ type Item = {
   color?: string;
   plate?: string;
   ean?: string;
+  // Abbigliamento (cat 16)
+  clothingGender?: string; // uomo/donna/bambino
+  // Tutto per i bambini (cat 17)
+  childrenAge?: string; // fascia d'età
+
   isOnline?: boolean;
   deletedAt?: string; // presente solo negli item nel cestino
   stats?: {
