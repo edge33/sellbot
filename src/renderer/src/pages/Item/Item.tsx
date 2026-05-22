@@ -48,7 +48,7 @@ const CONDITION_DESCRIPTIONS: Record<string, string> = {
 
 const buildDescriptionPrompt = (
   title: string,
-  category: string,
+  _category: string,
   brand: string | undefined,
   model: string | undefined,
   condition: string | undefined,
@@ -134,6 +134,8 @@ const Item = () => {
   const mileageRef = useRef<HTMLInputElement>(null);
   const yearRef = useRef<HTMLInputElement>(null);
   const monthRef = useRef<HTMLInputElement>(null);
+  const clothingGenderRef = useRef<HTMLSelectElement>(null);
+  const childrenAgeRef = useRef<HTMLSelectElement>(null);
 
   const [selectedCategory, setSelectedCategory] = useState<string>(item.category as string);
   const [errors, setErrors] = useState<z.inferFormattedError<typeof itemSchema>>();
@@ -204,11 +206,15 @@ const Item = () => {
       const condition = conditionRef?.current?.value;
       const dimension = dimensionRef?.current?.value;
       const type = typeRef?.current?.value;
+      const clothingGender = clothingGenderRef?.current?.value;
+      const childrenAge = childrenAgeRef?.current?.value;
       update = {
         ...update,
         condition,
         dimension,
-        ...(type && CATEGORIES_WITH_TYPE.includes(category as CATEGORY) ? { type } : {})
+        ...(type && CATEGORIES_WITH_TYPE.includes(category as CATEGORY) ? { type } : {}),
+        ...(category === CATEGORY.CLOTHING && clothingGender ? { clothingGender } : {}),
+        ...(category === CATEGORY.CHILDREN && childrenAge ? { childrenAge } : {})
       };
     }
 
@@ -244,7 +250,7 @@ const Item = () => {
                 defaultValue={item.category}
               >
                 <option value="" disabled>Seleziona una categoria</option>
-                <optgroup label="Informatica">
+                <optgroup label="Elettronica">
                   <option value="10">Informatica</option>
                   <option value="44">Console e videogiochi</option>
                   <option value="11">Audio e video</option>
@@ -264,6 +270,22 @@ const Item = () => {
                   <option value="14">Arredamento e Casalinghi</option>
                   <option value="37">Elettrodomestici</option>
                   <option value="15">Giardino e Fai da te</option>
+                </optgroup>
+                <optgroup label="Abbigliamento e Bambini">
+                  <option value="16">Abbigliamento e Accessori</option>
+                  <option value="17">Tutto per i bambini</option>
+                </optgroup>
+                <optgroup label="Sport, Hobby, Tempo libero">
+                  <option value="20">Sports</option>
+                  <option value="21">Collezionismo</option>
+                  <option value="38">Libri e Riviste</option>
+                  <option value="19">Musica e Film</option>
+                  <option value="39">Strumenti Musicali</option>
+                  <option value="41">Biciclette</option>
+                </optgroup>
+                <optgroup label="Animali">
+                  <option value="23">Animali ⚠️ (form legacy)</option>
+                  <option value="100">Accessori per animali</option>
                 </optgroup>
               </SelectInput>
 
@@ -582,7 +604,29 @@ const Item = () => {
                   {CATEGORIES_WITH_TYPE.includes(selectedCategory as CATEGORY) && (
                     <SelectInput ref={typeRef} label="Tipologia" name="type" defaultValue={item.type}>
                       <option value="" disabled>Seleziona una tipologia</option>
-                      {getOptionsForCategory(selectedCategory as CATEGORY.COMPUTER_SCIENCE | CATEGORY.AUDIO_VIDEO | CATEGORY.SMARTPHONES)}
+                      {getOptionsForCategory(selectedCategory as CATEGORY)}
+                    </SelectInput>
+                  )}
+
+                  {/* ABBIGLIAMENTO — Genere */}
+                  {selectedCategory === CATEGORY.CLOTHING && (
+                    <SelectInput ref={clothingGenderRef} label="Genere" name="clothingGender" defaultValue={item.clothingGender}>
+                      <option value="" disabled>Seleziona un genere</option>
+                      <option value="1">Uomo</option>
+                      <option value="2">Donna</option>
+                      <option value="3">Unisex</option>
+                    </SelectInput>
+                  )}
+
+                  {/* BAMBINI — Fascia d'età */}
+                  {selectedCategory === CATEGORY.CHILDREN && (
+                    <SelectInput ref={childrenAgeRef} label="Fascia d'età" name="childrenAge" defaultValue={item.childrenAge}>
+                      <option value="" disabled>Seleziona una fascia</option>
+                      <option value="1">0 - 12 mesi</option>
+                      <option value="2">1 - 3 anni</option>
+                      <option value="3">3 - 6 anni</option>
+                      <option value="4">6 - 12 anni</option>
+                      <option value="5">Per tutte le età</option>
                     </SelectInput>
                   )}
                 </>

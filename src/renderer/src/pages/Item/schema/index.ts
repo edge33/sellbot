@@ -29,6 +29,7 @@ export enum CATEGORY {
   MUSICAL_INSTRUMENTS = '39',
   BICYCLES = '41',
   // Animali
+  ANIMALS = '23',
   PET_ACCESSORIES = '100'
 }
 
@@ -50,7 +51,13 @@ export enum SIZE {
 export const CATEGORIES_WITH_TYPE = [
   CATEGORY.COMPUTER_SCIENCE,
   CATEGORY.AUDIO_VIDEO,
-  CATEGORY.SMARTPHONES
+  CATEGORY.SMARTPHONES,
+  CATEGORY.CLOTHING,
+  CATEGORY.CHILDREN,
+  CATEGORY.SPORTS,
+  CATEGORY.COLLECTIBLES,
+  CATEGORY.BOOKS,
+  CATEGORY.BICYCLES
 ];
 
 /**
@@ -136,11 +143,42 @@ const smartphoneCategory = z
   })
   .merge(z.object(baseItemSchema));
 
+// Categorie generiche (solo base + condition)
+const makeGenericCategory = (cat: CATEGORY) =>
+  z.object({ category: z.literal(cat) }).merge(z.object(baseItemSchema));
+
+// Categorie generiche con campo type
+const makeCategoryWithType = (cat: CATEGORY) =>
+  z.object({ category: z.literal(cat), type: z.string().optional() }).merge(z.object(baseItemSchema));
+
+const clothingCategory = z
+  .object({ category: z.literal(CATEGORY.CLOTHING), type: z.string().optional(), clothingGender: z.string().optional() })
+  .merge(z.object(baseItemSchema));
+
+const childrenCategory = z
+  .object({ category: z.literal(CATEGORY.CHILDREN), type: z.string().optional(), childrenAge: z.string().optional() })
+  .merge(z.object(baseItemSchema));
+
 // Combine the schemas using a discriminated union on `category`
 export const itemSchema = z.discriminatedUnion('category', [
   computerScienceCategory,
   videoGamesCategory,
   audioVideoCategory,
   photographyCategory,
-  smartphoneCategory
+  smartphoneCategory,
+  clothingCategory,
+  childrenCategory,
+  makeCategoryWithType(CATEGORY.SPORTS),
+  makeCategoryWithType(CATEGORY.COLLECTIBLES),
+  makeCategoryWithType(CATEGORY.BOOKS),
+  makeCategoryWithType(CATEGORY.BICYCLES),
+  makeGenericCategory(CATEGORY.MUSIC_FILM),
+  makeGenericCategory(CATEGORY.MUSICAL_INSTRUMENTS),
+  makeGenericCategory(CATEGORY.ANIMALS),
+  makeGenericCategory(CATEGORY.PET_ACCESSORIES),
+  makeGenericCategory(CATEGORY.FURNITURE),
+  makeGenericCategory(CATEGORY.GARDEN),
+  makeGenericCategory(CATEGORY.APPLIANCES),
+  makeGenericCategory(CATEGORY.CAR_ACCESSORIES),
+  makeGenericCategory(CATEGORY.MOTO_ACCESSORIES)
 ]);

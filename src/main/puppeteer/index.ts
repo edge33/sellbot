@@ -296,31 +296,45 @@ const doInsertItem = async (
       await clickDropdownByText('itemCondition', condLabel, 'condition');
     }
 
+    // Mappe valore→etichetta per i dropdown react-select delle categorie nuove.
+    // Si clicca per testo (clickDropdownByText) come per la condizione.
+    const TYPE_LABELS: Record<string, Record<string, string>> = {
+      '16': { '1': 'Felpe e maglioni', '2': 'Giacche e giubbotti', '3': 'Gonne', '4': 'Pantaloni e jeans', '5': 'Scarpe', '6': 'Accessori', '7': 'T-shirt e camicie', '8': 'Intimo e pigiami', '9': 'Vestiti e completi', '10': 'Borse e zaini', '11': 'Altro', '12': 'Orologi e gioielli' },
+      '17': { '1': 'Abbigliamento Bimbi', '2': "Prodotti per l'infanzia", '3': 'Giochi' },
+      '20': { '1': 'Calcio', '2': 'Basket', '3': 'Volley', '4': 'Sci e Snowboard', '5': 'Ciclismo', '6': 'Acquatici', '7': 'Palestra', '8': 'Golf', '9': 'Motori', '10': 'Outdoor', '11': 'Altro' },
+      '21': { '1': 'Francobolli', '2': 'Monete', '3': 'Cartoline', '4': 'Militaria', '5': 'Editoria', '6': 'Carte e Schede', '7': 'Altro', '8': 'Modellismo', '9': 'Modernariato', '10': 'Bambole' },
+      '38': { '1': 'Libri scolastici e universitari', '2': 'Letteratura e Narrativa', '3': 'Gialli e Thriller', '4': 'Biografie', '5': 'Storia', '6': 'Cucina', '7': 'Fumetti', '8': 'Libri per bambini', '10': 'Altro' },
+      '41': { '1': 'Uomo', '2': 'Donna', '3': 'Bimbo', '4': 'MTB e Touring', '5': 'Corsa', '6': 'Altre tipologie', '7': 'Pieghevoli', '8': 'BMX', '9': 'Scatto fisso e single speed', '10': 'Componenti e abbigliamento' }
+    };
+    const TYPE_INPUT_BY_CATEGORY: Record<string, string> = {
+      '10': 'computerType', '11': 'audioVideoType', '12': 'phoneType',
+      '16': 'clothingType', '17': 'childrenType', '20': 'sportType',
+      '21': 'hobbyType', '38': 'bookType', '41': 'bicycleType'
+    };
+
     if (item.type) {
-      // Mappa categoria → nome input del dropdown "type" su Subito
-      const TYPE_INPUT_BY_CATEGORY: Record<string, string> = {
-        '10': 'computerType',
-        '11': 'audioVideoType',
-        '12': 'phoneType',
-        '16': 'clothingType',
-        '17': 'childrenType',
-        '20': 'sportType',
-        '21': 'hobbyType',
-        '38': 'bookType',
-        '41': 'bicycleType'
-      };
       const typeInputName = TYPE_INPUT_BY_CATEGORY[item.category] || 'computerType';
-      await clickDropdownByInputName(typeInputName, item.type, 'type');
+      const labelMap = TYPE_LABELS[item.category];
+      if (labelMap) {
+        // Categorie nuove: react-select → clicco per testo
+        const typeLabel = labelMap[item.type] ?? '';
+        await clickDropdownByText(typeInputName, typeLabel, 'type');
+      } else {
+        // Categorie storiche (10/11/12): match per valore numerico
+        await clickDropdownByInputName(typeInputName, item.type, 'type');
+      }
     }
 
     // --- ABBIGLIAMENTO: genere (cat 16) ---
     if (item.category === '16' && item.clothingGender) {
-      await clickDropdownByInputName('clothingGender', item.clothingGender, 'clothingGender');
+      const GENDER_LABELS: Record<string, string> = { '1': 'Uomo', '2': 'Donna', '3': 'Unisex' };
+      await clickDropdownByText('clothingGender', GENDER_LABELS[item.clothingGender] ?? '', 'clothingGender');
     }
 
     // --- TUTTO PER I BAMBINI: fascia d'età (cat 17) ---
     if (item.category === '17' && item.childrenAge) {
-      await clickDropdownByInputName('childrenAge', item.childrenAge, 'childrenAge');
+      const AGE_LABELS: Record<string, string> = { '1': '0 - 12 mesi', '2': '1 - 3 anni', '3': '3 - 6 anni', '4': '6 - 12 anni', '5': 'Per tutte le età' };
+      await clickDropdownByText('childrenAge', AGE_LABELS[item.childrenAge] ?? '', 'childrenAge');
     }
   } else {
     // --- MOTORI: Marca, Chilometraggio, Anno, Mese ---

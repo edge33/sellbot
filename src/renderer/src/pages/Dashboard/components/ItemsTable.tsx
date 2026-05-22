@@ -21,6 +21,7 @@ const getItemCategory = (category: string) => {
     case '20': return 'Sports';
     case '21': return 'Collezionismo';
     case '22': return 'Nautica';
+    case '23': return 'Animali';
     case '34': return 'Caravan e Camper';
     case '36': return 'Accessori moto';
     case '37': return 'Elettrodomestici';

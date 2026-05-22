@@ -1,4 +1,4 @@
-import { readdirSync, readFileSync, unlinkSync, writeFileSync, mkdirSync, existsSync, renameSync } from 'fs';
+import { readdirSync, readFileSync, unlinkSync, writeFileSync, mkdirSync, existsSync } from 'fs';
 import { v4 as uuidv4 } from 'uuid';
 import { getAppSettings, getSettings } from '../settings';
 import path from 'path';
