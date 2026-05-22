@@ -255,33 +255,6 @@ const doInsertItem = async (
       await delay(ACTION_TIMEOUT);
     };
 
-    const clickDropdownByInputName = async (inputName: string, optionValue: string, label: string) => {
-      const dropdownContainer = await puppeteerPage.$(
-        `::-p-xpath(//input[@name="${inputName}"]/following-sibling::div | //input[@name="${inputName}"]/../div[@tabindex])`
-      ) || await puppeteerPage.$(
-        `::-p-xpath(//input[@name="${inputName}"]/parent::div/parent::div)`
-      );
-      if (dropdownContainer) {
-        await dropdownContainer.click();
-      } else {
-        const placeholderDiv = await puppeteerPage.$(
-          `::-p-xpath(//section[.//input[@name="${inputName}"]]//div[@tabindex="0"])`
-        );
-        await placeholderDiv?.click();
-      }
-      await delay(ACTION_TIMEOUT);
-      const option = await puppeteerPage.$(`#${inputName}__option--${optionValue}`) ||
-        await puppeteerPage.$(`[id="${inputName}__option--${optionValue}"]`) ||
-        await puppeteerPage.$(`::-p-xpath(//ul[@role="listbox"]//li[@data-value="${optionValue}"])`);
-      if (option) {
-        await option.click();
-        webContents.send('log', `set ${label}`);
-      } else {
-        webContents.send('log', `ERROR: option ${optionValue} not found for ${label}`);
-      }
-      await delay(ACTION_TIMEOUT);
-    };
-
     // Mapping condition value → testo visibile su Subito
     const CONDITION_LABELS: Record<string, string> = {
       '0': 'Nuovo',
@@ -296,9 +269,13 @@ const doInsertItem = async (
       await clickDropdownByText('itemCondition', condLabel, 'condition');
     }
 
-    // Mappe valore→etichetta per i dropdown react-select delle categorie nuove.
-    // Si clicca per testo (clickDropdownByText) come per la condizione.
+    // Mappe valore→etichetta per i dropdown react-select.
+    // Si clicca per testo (clickDropdownByText) come per la condizione — i react-select
+    // di Subito usano id basati su indice, quindi il match per valore non funziona.
     const TYPE_LABELS: Record<string, Record<string, string>> = {
+      '10': { '1': 'Computer Fissi', '2': 'NoteBook & Tablet', '3': 'Accessori' },
+      '11': { '1': 'TV', '2': 'Lettori DVD', '3': 'Radio/Stereo', '4': 'Altro', '5': 'Lettori MP3' },
+      '12': { '1': 'Cellulari e Smartphone', '2': 'Accessori Telefonia', '3': 'Fissi, Cordless e Altro' },
       '16': { '1': 'Felpe e maglioni', '2': 'Giacche e giubbotti', '3': 'Gonne', '4': 'Pantaloni e jeans', '5': 'Scarpe', '6': 'Accessori', '7': 'T-shirt e camicie', '8': 'Intimo e pigiami', '9': 'Vestiti e completi', '10': 'Borse e zaini', '11': 'Altro', '12': 'Orologi e gioielli' },
       '17': { '1': 'Abbigliamento Bimbi', '2': "Prodotti per l'infanzia", '3': 'Giochi' },
       '20': { '1': 'Calcio', '2': 'Basket', '3': 'Volley', '4': 'Sci e Snowboard', '5': 'Ciclismo', '6': 'Acquatici', '7': 'Palestra', '8': 'Golf', '9': 'Motori', '10': 'Outdoor', '11': 'Altro' },
@@ -313,15 +290,11 @@ const doInsertItem = async (
     };
 
     if (item.type) {
-      const typeInputName = TYPE_INPUT_BY_CATEGORY[item.category] || 'computerType';
+      const typeInputName = TYPE_INPUT_BY_CATEGORY[item.category];
       const labelMap = TYPE_LABELS[item.category];
-      if (labelMap) {
-        // Categorie nuove: react-select → clicco per testo
+      if (typeInputName && labelMap) {
         const typeLabel = labelMap[item.type] ?? '';
         await clickDropdownByText(typeInputName, typeLabel, 'type');
-      } else {
-        // Categorie storiche (10/11/12): match per valore numerico
-        await clickDropdownByInputName(typeInputName, item.type, 'type');
       }
     }
 
@@ -556,18 +529,19 @@ const doInsertItem = async (
   webContents.send('log', 'set mobile phone');
   await delay(ACTION_TIMEOUT);
 
-  // --- SUBMIT ---
+  // --- SUBMIT (step "Continua" — presente solo in alcuni flussi/categorie) ---
   await puppeteerPage.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
   await delay(1000);
   const submitButton = await puppeteerPage.waitForSelector(
     '::-p-xpath(//button[contains(text(),"Continua")])',
-    { timeout: 10000 }
+    { timeout: 3000 }
   ).catch(() => null);
   if (submitButton) {
     await submitButton.click();
-    webContents.send('log', 'submit');
+    webContents.send('log', 'submit (step Continua)');
   } else {
-    webContents.send('log', 'ERROR: continua button not found');
+    // Subito ora usa un form a pagina singola: nessuno step "Continua", si va diretti a Pubblica
+    webContents.send('log', 'nessuno step Continua, vado direttamente a Pubblica');
   }
   await delay(ACTION_TIMEOUT * 3);
 

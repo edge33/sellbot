@@ -70,23 +70,23 @@ export const CATEGORIES_WITH_TYPE = [
  */
 
 export enum COMPUTER_SCIENCE_TYPE {
-  NOTEBOOK = '0',
   DESKTOP = '1',
-  ACCESSORIES = '2'
+  NOTEBOOK = '2',
+  ACCESSORIES = '3'
 }
 
 export enum AUDIO_VIDEO_TYPE {
-  TV = '0',
-  DVD_PLAYERS = '1',
-  RADIO_STEREO = '2',
-  MP3_PLAYERS = '3',
-  MISC = '4'
+  TV = '1',
+  DVD_PLAYERS = '2',
+  RADIO_STEREO = '3',
+  MISC = '4',
+  MP3_PLAYERS = '5'
 }
 
 export enum SMARTPHONES_TYPE {
-  SMARTPHONES = '0',
-  ACCESSORIES = '1',
-  HOME_PHONE = '2'
+  SMARTPHONES = '1',
+  ACCESSORIES = '2',
+  HOME_PHONE = '3'
 }
 
 const required = { message: 'Questo campo è obbligatorio' };
