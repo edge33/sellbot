@@ -65,58 +65,58 @@ const ACTION_TIMEOUT = 1000;
 const delay = (timeout: number) =>
   new Promise<void>((resolve) => setTimeout(() => resolve(), timeout));
 
-const withRunningCheck = <T extends unknown[]>(
-  fn: (callback: () => void, ...params: T) => Promise<void>
-) => {
+/**
+ * Wrapper per operazioni di puppeteer batch. Garantisce che SOLO una operazione
+ * "lock-aware" sia in esecuzione alla volta. La flag isRunning rimane true per
+ * tutta la durata di fn, indipendentemente da quante sotto-operazioni esegue
+ * (es. insertItems che chiama doInsertItem N volte). isRunning viene resettata
+ * in finally, anche se fn solleva eccezione.
+ */
+const withRunningCheck = <T extends unknown[]>(fn: (...params: T) => Promise<void>) => {
   return async (...params: T) => {
     if (isRunning) {
       return;
     }
-
     isRunning = true;
-    const callback = () => {
-      isRunning = false;
-    };
-
     try {
-      await fn(callback, ...params);
+      await fn(...params);
     } catch (err) {
-      console.log(err);
-
-      callback();
+      console.log('[withRunningCheck] errore:', err);
+    } finally {
+      isRunning = false;
     }
   };
 };
-const handleAuth = withRunningCheck(async (callback: () => void, webContents: WebContents) => {
+/**
+ * handleAuth ha un ciclo di vita diverso: il puppeteerBrowser resta aperto
+ * finché l'utente non lo chiude manualmente. Quindi isRunning deve restare true
+ * fino al close event. Per questo gestiamo lock manualmente (no withRunningCheck).
+ */
+const handleAuth = async (webContents: WebContents): Promise<void> => {
+  if (isRunning) return;
   const appSettings = getAppSettings();
+  if (!appSettings) return;
 
-  if (!appSettings) {
-    callback();
-    return;
+  isRunning = true;
+  try {
+    const { chromiumPath } = appSettings;
+    puppeteerBrowser = await puppeteer.launch({
+      executablePath: chromiumPath,
+      headless: false
+    });
+    puppeteerPage = await puppeteerBrowser.newPage();
+    await puppeteerPage.setViewport({ width: 1920, height: 1080 });
+    await blockCookieBanner(puppeteerPage);
+    await puppeteerPage.goto('https://subito.it');
+    log(webContents, 'Opened page');
+    puppeteerPage.on('close', () => {
+      isRunning = false;
+    });
+  } catch (err) {
+    console.log('[handleAuth] errore:', err);
+    isRunning = false;
   }
-
-  const { chromiumPath } = appSettings;
-
-  puppeteerBrowser = await puppeteer.launch({
-    executablePath: chromiumPath,
-
-    headless: false // Puppeteer controlled browser should be visible
-  });
-
-  puppeteerPage = await puppeteerBrowser.newPage();
-
-  await puppeteerPage.setViewport({ width: 1920, height: 1080 });
-  await blockCookieBanner(puppeteerPage);
-
-  // Load a URL or website
-  await puppeteerPage.goto('https://subito.it');
-  log(webContents, 'Opened page');
-
-  puppeteerPage.on('close', () => {
-    console.log('page was closed ');
-    callback();
-  });
-});
+};
 
 const getAndStoreCookies = async () => {
   if (!isRunning) {
@@ -134,8 +134,7 @@ const doInsertItem = async (
   webContents: WebContents,
   chromiumPath: string,
   mobilePhone: string,
-  location: string,
-  callback: () => void
+  location: string
 ) => {
   puppeteerBrowser = await puppeteer.launch({
     executablePath: chromiumPath,
@@ -149,7 +148,6 @@ const doInsertItem = async (
   if (!item) {
     console.error(`Item ${itemId} was not found`);
     await puppeteerBrowser.close();
-    callback();
     return;
   }
 
@@ -186,14 +184,8 @@ const doInsertItem = async (
   if (baseErrors.length > 0) {
     log(webContents, `ERROR: inserimento annullato — ${baseErrors.join(', ')}`);
     await puppeteerBrowser.close();
-    callback();
     return;
   }
-
-  puppeteerPage.on('close', () => {
-    console.log('page was closed ');
-    callback();
-  });
 
   const cookies = getSettings().cookies;
   for (const cookie of cookies) {
@@ -211,7 +203,6 @@ const doInsertItem = async (
     log(webContents, 'ERROR: cookie scaduti — effettua nuovamente il login dalle Impostazioni');
     await saveErrorScreenshot(puppeteerPage, 'cookie_scaduti');
     await puppeteerBrowser.close();
-    callback();
     return;
   }
 
@@ -577,7 +568,7 @@ const doInsertItem = async (
   }
 
   // --- PHONE ---
-  phone?.type(mobilePhone);
+  await phone?.type(mobilePhone);
   log(webContents, 'set mobile phone');
   await delay(ACTION_TIMEOUT);
 
@@ -637,22 +628,22 @@ const doInsertItem = async (
   }
 
   await puppeteerBrowser.close();
-  callback();
 };
 
 const insertItems = withRunningCheck(
-  async (callback: () => void, webContents: WebContents, itemIds: string[]) => {
+  async (webContents: WebContents, itemIds: string[]) => {
     const appSettings = getAppSettings();
-
-    if (!appSettings) {
-      callback();
-      return;
-    }
+    if (!appSettings) return;
 
     const { chromiumPath, mobilePhone, location } = appSettings;
 
     for (const itemId of itemIds) {
-      await doInsertItem(itemId, webContents, chromiumPath, mobilePhone, location ?? '', callback);
+      try {
+        await doInsertItem(itemId, webContents, chromiumPath, mobilePhone, location ?? '');
+      } catch (err) {
+        log(webContents, `ERROR: inserimento item ${itemId} fallito — ${err}`);
+        // Continua col prossimo item del batch
+      }
     }
   }
 );
@@ -809,30 +800,37 @@ const checkItemsOnline = async (
   return stillOnline;
 };
 const removeListings = withRunningCheck(
-  async (callback: () => void, webContents: WebContents, itemIds: string[]) => {
+  async (webContents: WebContents, itemIds: string[]) => {
     const appSettings = getAppSettings();
-    if (!appSettings) { callback(); return; }
+    if (!appSettings) return;
     const { chromiumPath } = appSettings;
     for (const itemId of itemIds) {
-      await doRemoveItemInternal(itemId, webContents, chromiumPath);
+      try {
+        await doRemoveItemInternal(itemId, webContents, chromiumPath);
+      } catch (err) {
+        log(webContents, `ERROR: rimozione item ${itemId} fallita — ${err}`);
+      }
     }
-    callback();
   }
 );
 
 // Funzione per lo scheduler: cancella, verifica, poi pubblica
 const removeAndInsertItems = withRunningCheck(
-  async (callback: () => void, webContents: WebContents, itemIds: string[]) => {
+  async (webContents: WebContents, itemIds: string[]) => {
     const appSettings = getAppSettings();
-    if (!appSettings) { callback(); return; }
+    if (!appSettings) return;
     const { chromiumPath, mobilePhone, location } = appSettings;
 
     // Step 1: cancella tutti gli annunci, traccia quali erano online
     log(webContents, '[Scheduler] Cancellazione annunci in corso...');
     let anyDeleted = false;
     for (const itemId of itemIds) {
-      const wasOnline = await doRemoveItemInternal(itemId, webContents, chromiumPath);
-      if (wasOnline) anyDeleted = true;
+      try {
+        const wasOnline = await doRemoveItemInternal(itemId, webContents, chromiumPath);
+        if (wasOnline) anyDeleted = true;
+      } catch (err) {
+        log(webContents, `ERROR: rimozione item ${itemId} fallita — ${err}`);
+      }
     }
 
     // Step 2: se almeno uno era online, attendi 5 minuti per la propagazione
@@ -847,11 +845,14 @@ const removeAndInsertItems = withRunningCheck(
     // Step 3: pubblica tutti gli annunci
     log(webContents, '[Scheduler] Pubblicazione annunci...');
     for (const itemId of itemIds) {
-      await doInsertItem(itemId, webContents, chromiumPath, mobilePhone, location ?? '', () => {});
+      try {
+        await doInsertItem(itemId, webContents, chromiumPath, mobilePhone, location ?? '');
+      } catch (err) {
+        log(webContents, `ERROR: pubblicazione item ${itemId} fallita — ${err}`);
+      }
     }
 
     log(webContents, '[Scheduler] Completato.');
-    callback();
   }
 );
 

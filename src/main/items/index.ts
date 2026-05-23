@@ -4,6 +4,27 @@ import { getAppSettings, getSettings } from '../settings';
 import path from 'path';
 import type { Item } from '../../shared/types';
 
+// =================== CACHE ====================
+// Items: tutti gli item del folder itemsPath letti una volta sola.
+// Photos: mappa filePath → base64, popolata pigramente quando serve.
+// Invalidata su qualunque write/delete.
+// Side benefit: rilettura/encoding evitata sui successivi render della dashboard.
+
+let itemsCache: Item[] | null = null;
+let cachedItemsPath: string | null = null;
+const photoCache = new Map<string, string>(); // path → base64
+
+const invalidateItems = (): void => {
+  itemsCache = null;
+  // NOTA: photoCache non viene invalidata, le foto sono immutabili una volta caricate
+};
+
+const invalidatePhoto = (photoPath: string): void => {
+  photoCache.delete(photoPath);
+};
+
+// =================== READ ====================
+
 const getTrashPath = () => {
   const { itemsPath } = getSettings();
   const trashPath = path.join(itemsPath, 'trash');
@@ -11,27 +32,73 @@ const getTrashPath = () => {
   return trashPath;
 };
 
-const getItems = () => {
-  const { itemsPath } = getSettings();
-
+const readAllItemsFromDisk = (): Item[] => {
+  const { itemsPath } = getSettings() ?? {};
+  if (!itemsPath) return [];
   const items: Item[] = [];
   try {
     const fileNames = readdirSync(itemsPath).filter((file) => file.endsWith('.json'));
-
     for (const fileName of fileNames) {
       const filePath = path.join(itemsPath, fileName);
-      const item = JSON.parse(readFileSync(filePath, 'utf-8')) as Item;
-
-      items.push({ ...item, filePath });
+      try {
+        const item = JSON.parse(readFileSync(filePath, 'utf-8')) as Item;
+        items.push({ ...item, filePath });
+      } catch (err) {
+        console.log(`[items] skip file corrotto ${fileName}:`, err);
+      }
     }
   } catch (err) {
-    console.log(err);
+    console.log('[items] errore lettura cartella:', err);
     return [];
   }
   return items;
 };
 
-const getItemsWithEncodedPics = () => {
+const getItems = (): Item[] => {
+  // Invalida cache se itemsPath è cambiato (utente ha modificato Settings)
+  const currentPath = getSettings()?.itemsPath ?? null;
+  if (cachedItemsPath !== currentPath) {
+    itemsCache = null;
+    cachedItemsPath = currentPath;
+  }
+  if (itemsCache === null) {
+    itemsCache = readAllItemsFromDisk();
+  }
+  // Ritorna copia shallow per evitare mutazioni accidentali della cache
+  return itemsCache.map((i) => ({ ...i, photos: i.photos ? [...i.photos] : undefined }));
+};
+
+const getItem = (itemId: string): Item | undefined => {
+  return getItems().find((item) => item.id === itemId);
+};
+
+// Codifica una foto in base64 con cache.
+const encodeOnePhoto = (photo: string): string | null => {
+  // Se è già base64 (lungo) usalo direttamente
+  if (photo.length > 260) return photo;
+  // Cache hit
+  const cached = photoCache.get(photo);
+  if (cached) return cached;
+  // Cache miss: leggi e codifica
+  try {
+    const encoded = readFileSync(photo).toString('base64');
+    photoCache.set(photo, encoded);
+    return encoded;
+  } catch {
+    return null;
+  }
+};
+
+const encodePics = (picturePaths: string[]): string[] => {
+  const out: string[] = [];
+  for (const p of picturePaths) {
+    const enc = encodeOnePhoto(p);
+    if (enc) out.push(enc);
+  }
+  return out;
+};
+
+const getItemsWithEncodedPics = (): Item[] => {
   const items = getItems();
   for (const item of items) {
     if (item.photos) {
@@ -46,7 +113,7 @@ const getItemsWithEncodedPics = () => {
   return items;
 };
 
-const getItemWithEncodedPics = (itemId: string) => {
+const getItemWithEncodedPics = (itemId: string): Item | undefined => {
   const item = getItem(itemId);
   if (!item) return undefined;
   try {
@@ -60,54 +127,33 @@ const getItemWithEncodedPics = (itemId: string) => {
   return item;
 };
 
-const encodePics = (picturePaths: string[]) => {
-  const encodedPics: string[] = [];
-  for (const currentPic of picturePaths) {
-    // Se la stringa è già base64 (lunghezza > 260), usala direttamente
-    if (currentPic.length > 260) {
-      encodedPics.push(currentPic);
-      continue;
-    }
-    try {
-      encodedPics.push(readFileSync(currentPic).toString('base64'));
-    } catch {
-      // File non trovato o percorso non valido: salta
-    }
-  }
-  return encodedPics;
-};
+// =================== WRITE ====================
 
-const getItem = (itemId: string) => {
-  const items = getItems();
-
-  return items.find((item) => item.id === itemId);
-};
-
-const updateItem = (item: Item) => {
+const updateItem = (item: Item): boolean => {
   try {
     if (item.id) {
       const currentItem = getItem(item.id);
-
-      if (!currentItem) {
-        return;
-      }
+      if (!currentItem) return false;
 
       const newItem = { ...item };
-
       if (!item.photos?.length) {
-        newItem.photos = currentItem?.photos;
+        newItem.photos = currentItem.photos;
       }
 
-      writeFileSync(currentItem.filePath, JSON.stringify(newItem));
+      const targetFilePath = currentItem.filePath;
+      if (!targetFilePath) return false;
+      writeFileSync(targetFilePath, JSON.stringify(newItem));
+      invalidateItems();
       return true;
     }
 
     const settings = getAppSettings();
+    if (!settings?.itemsPath) return false;
 
     const id = uuidv4();
     const newItem = { ...item, id };
-    writeFileSync(path.join(settings?.itemsPath as string, `${id}.json`), JSON.stringify(newItem));
-
+    writeFileSync(path.join(settings.itemsPath, `${id}.json`), JSON.stringify(newItem));
+    invalidateItems();
     return true;
   } catch (err) {
     console.log(err);
@@ -115,23 +161,26 @@ const updateItem = (item: Item) => {
   }
 };
 
-const cloneItem = (itemId: string) => {
-  const newItem = getItem(itemId);
-  if (newItem) {
-    delete newItem?.id;
-    updateItem(newItem);
-  }
+const cloneItem = (itemId: string): void => {
+  const orig = getItem(itemId);
+  if (!orig) return;
+  // Rimuovi id e filePath: updateItem creerà un nuovo file con nuovo uuid
+  const { id: _, filePath: __, ...rest } = orig as Item & { filePath?: string };
+  updateItem({ ...rest, photos: orig.photos ? [...orig.photos] : undefined } as Item);
 };
 
-const deleteItem = (itemId: string) => {
+const deleteItem = (itemId: string): void => {
   const item = getItem(itemId);
-  if (!item) return;
+  if (!item || !item.filePath) return;
   const trashPath = getTrashPath();
   const trashFile = path.join(trashPath, `${itemId}.json`);
   const trashed = { ...item, deletedAt: new Date().toISOString() };
   writeFileSync(trashFile, JSON.stringify(trashed));
   unlinkSync(item.filePath);
+  invalidateItems();
 };
+
+// =================== TRASH ====================
 
 const getTrashItems = (): Item[] => {
   try {
@@ -144,7 +193,6 @@ const getTrashItems = (): Item[] => {
       const filePath = path.join(trashPath, file);
       try {
         const item = JSON.parse(readFileSync(filePath, 'utf-8')) as Item;
-        // Auto-cleanup: elimina definitivamente dopo 30 giorni
         if (item.deletedAt && now - new Date(item.deletedAt).getTime() > THIRTY_DAYS) {
           _permanentlyDelete(item, filePath);
           continue;
@@ -158,19 +206,21 @@ const getTrashItems = (): Item[] => {
   }
 };
 
-// Elimina file JSON dal cestino + foto dal disco
-const _permanentlyDelete = (item: Item, trashFilePath: string) => {
+const _permanentlyDelete = (item: Item, trashFilePath: string): void => {
   try { unlinkSync(trashFilePath); } catch { /* ignora */ }
   if (item.photos) {
     for (const photo of item.photos) {
       if (photo.length <= 260 && existsSync(photo)) {
-        try { unlinkSync(photo); } catch { /* ignora */ }
+        try {
+          unlinkSync(photo);
+          invalidatePhoto(photo);
+        } catch { /* ignora */ }
       }
     }
   }
 };
 
-const restoreItem = (itemId: string) => {
+const restoreItem = (itemId: string): boolean => {
   const trashPath = getTrashPath();
   const trashFile = path.join(trashPath, `${itemId}.json`);
   if (!existsSync(trashFile)) return false;
@@ -180,10 +230,11 @@ const restoreItem = (itemId: string) => {
   const destFile = path.join(itemsPath, `${itemId}.json`);
   writeFileSync(destFile, JSON.stringify(cleanItem));
   unlinkSync(trashFile);
+  invalidateItems();
   return true;
 };
 
-const permanentlyDeleteItem = (itemId: string) => {
+const permanentlyDeleteItem = (itemId: string): boolean => {
   const trashPath = getTrashPath();
   const trashFile = path.join(trashPath, `${itemId}.json`);
   if (!existsSync(trashFile)) return false;
@@ -202,5 +253,6 @@ export {
   deleteItem,
   getTrashItems,
   restoreItem,
-  permanentlyDeleteItem
+  permanentlyDeleteItem,
+  invalidateItems
 };
