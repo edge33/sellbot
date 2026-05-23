@@ -1,4 +1,4 @@
-import { BrowserWindow, ipcMain, shell, dialog } from 'electron';
+import { BrowserWindow, ipcMain, shell, dialog, Notification } from 'electron';
 import { handleAuth, getAndStoreCookies, insertItems, removeListings, removeAndInsertItems, checkItemsOnline, fetchItemsStats } from '../puppeteer';
 import { getAppSettings, storeSettings, getSettings } from '../settings';
 import {
@@ -20,6 +20,7 @@ import AdmZip from 'adm-zip';
 import { writeFileSync } from 'fs';
 import { v4 as uuidv4 } from 'uuid';
 import path from 'path';
+import { log } from '../logger';
 
 const IPC_CHANNELS = {
   EXPORT_ITEMS: 'EXPORT_ITEMS',
@@ -218,13 +219,26 @@ const ipcs = (mainWindow: BrowserWindow) => {
     return storeSettings(appSettings);
   });
 
-  ipcMain.handle(IPC_CHANNELS.INSERT_ITEMS, (_, itemIds: string[]) =>
-    insertItems(mainWindow.webContents, itemIds)
-  );
+  // Helper: notifica desktop al termine di un'operazione lunga
+  const notifyDone = (title: string, body: string): void => {
+    try {
+      if (Notification.isSupported()) {
+        new Notification({ title, body, silent: false }).show();
+      }
+    } catch (err) {
+      console.error('[Notification] errore:', err);
+    }
+  };
 
-  ipcMain.handle(IPC_CHANNELS.REMOVE_LISTINGS, (_, itemIds: string[]) =>
-    removeListings(mainWindow.webContents, itemIds)
-  );
+  ipcMain.handle(IPC_CHANNELS.INSERT_ITEMS, async (_, itemIds: string[]) => {
+    await insertItems(mainWindow.webContents, itemIds);
+    notifyDone('Sellbot', `Inserimento completato (${itemIds.length} annunc${itemIds.length === 1 ? 'io' : 'i'})`);
+  });
+
+  ipcMain.handle(IPC_CHANNELS.REMOVE_LISTINGS, async (_, itemIds: string[]) => {
+    await removeListings(mainWindow.webContents, itemIds);
+    notifyDone('Sellbot', `Rimozione completata (${itemIds.length} annunc${itemIds.length === 1 ? 'io' : 'i'})`);
+  });
 
   ipcMain.handle(IPC_CHANNELS.CHECK_ITEMS_STATUS, async (_, itemIds: string[]) => {
     const settings = getSettings();
@@ -238,6 +252,7 @@ const ipcs = (mainWindow: BrowserWindow) => {
         await updateItem({ ...item, isOnline: newStatus });
       }
     }
+    notifyDone('Sellbot', `Controllo stato completato (${stillOnline.length} online)`);
   });
 
   ipcMain.handle(IPC_CHANNELS.GET_ANTHROPIC_KEY, () => {
@@ -336,7 +351,7 @@ const ipcs = (mainWindow: BrowserWindow) => {
         const allItems = getItems();
         const onlineIds = allItems.filter((i) => i.isOnline && i.id).map((i) => i.id!);
         if (onlineIds.length > 0) {
-          mainWindow.webContents.send('log', '[Stats] Aggiornamento automatico stats...');
+          log(mainWindow.webContents, '[Stats] Aggiornamento automatico stats...');
           try {
             const statsMap = await fetchItemsStats(onlineIds, mainWindow.webContents, chromiumPath);
             for (const [itemId, stats] of Object.entries(statsMap)) {
@@ -344,7 +359,7 @@ const ipcs = (mainWindow: BrowserWindow) => {
               if (item) await updateItem({ ...item, stats });
             }
             lastStatsRefresh = now;
-            mainWindow.webContents.send('log', '[Stats] Aggiornamento completato');
+            log(mainWindow.webContents, '[Stats] Aggiornamento completato');
 
             // --- Auto-ripubblica se posizione > soglia ---
             for (const schedule of schedules) {
@@ -358,14 +373,14 @@ const ipcs = (mainWindow: BrowserWindow) => {
               });
               if (itemsToRepublish.length > 0) {
                 const label = schedule.name || schedule.id;
-                mainWindow.webContents.send('log', `[Auto-ripubblica] "${label}" — ${itemsToRepublish.length} annunci oltre pagina ${threshold}, avvio ripubblicazione...`);
+                log(mainWindow.webContents, `[Auto-ripubblica] "${label}" — ${itemsToRepublish.length} annunci oltre pagina ${threshold}, avvio ripubblicazione...`);
                 let outcome: 'success' | 'error' = 'success';
                 let message: string | undefined;
                 try {
                   await removeAndInsertItems(mainWindow.webContents, itemsToRepublish);
                 } catch (err) {
                   console.error('[Auto-ripubblica] Errore:', err);
-                  mainWindow.webContents.send('log', `[Auto-ripubblica] Errore: ${err}`);
+                  log(mainWindow.webContents, `[Auto-ripubblica] Errore: ${err}`);
                   outcome = 'error';
                   message = String(err);
                 }
@@ -375,7 +390,7 @@ const ipcs = (mainWindow: BrowserWindow) => {
               }
             }
           } catch (err) {
-            mainWindow.webContents.send('log', `[Stats] Errore aggiornamento: ${err}`);
+            log(mainWindow.webContents, `[Stats] Errore aggiornamento: ${err}`);
           }
         }
       }
@@ -426,7 +441,7 @@ const ipcs = (mainWindow: BrowserWindow) => {
     let outcome: 'success' | 'error' = 'success';
     let message: string | undefined;
     try {
-      mainWindow.webContents.send('log', `[Esegui ora] Avvio pianificazione "${schedule.name || id}"...`);
+      log(mainWindow.webContents, `[Esegui ora] Avvio pianificazione "${schedule.name || id}"...`);
       await removeAndInsertItems(mainWindow.webContents, schedule.itemIds);
     } catch (err) {
       outcome = 'error';
@@ -512,18 +527,19 @@ const ipcs = (mainWindow: BrowserWindow) => {
     const chromiumPath = settings?.chromiumPath || '';
     const statsMap = await fetchItemsStats(itemIds, mainWindow.webContents, chromiumPath);
     // Aggiorna stats e isOnline per ogni item passato
+    let foundCount = 0;
     for (const itemId of itemIds) {
       const item = await getItemWithEncodedPics(itemId);
       if (!item) continue;
       const stats = statsMap[itemId];
       if (stats) {
-        // Trovato sulla pagina → online, aggiorna stats
         await updateItem({ ...item, stats, isOnline: true });
+        foundCount++;
       } else {
-        // Non trovato → offline
         await updateItem({ ...item, isOnline: false });
       }
     }
+    notifyDone('Sellbot', `Stats aggiornate (${foundCount}/${itemIds.length} online)`);
     return statsMap;
   });
 

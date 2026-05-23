@@ -6,6 +6,7 @@ import { AUTO_BRANDS, MOTO_BRANDS } from '../../renderer/src/pages/Item/carData'
 import { writeFileSync, unlinkSync, mkdirSync, existsSync } from 'fs';
 import { tmpdir } from 'os';
 import path from 'path';
+import { log } from '../logger';
 
 // Salva uno screenshot nella cartella appData/sellbot/screenshots
 const saveErrorScreenshot = async (page: Page, label: string): Promise<void> => {
@@ -89,7 +90,7 @@ const handleAuth = withRunningCheck(async (callback: () => void, webContents: We
 
   // Load a URL or website
   await puppeteerPage.goto('https://subito.it');
-  webContents.send('log', 'Opened page');
+  log(webContents, 'Opened page');
 
   puppeteerPage.on('close', () => {
     console.log('page was closed ');
@@ -133,20 +134,37 @@ const doInsertItem = async (
   }
 
   // --- VALIDAZIONE PRE-INSERIMENTO ---
-  if (!item.title?.trim()) {
-    webContents.send('log', 'ERROR: titolo mancante, inserimento annullato');
-    await puppeteerBrowser.close();
-    callback();
-    return;
+  // Campi base
+  const baseErrors: string[] = [];
+  if (!item.title?.trim()) baseErrors.push('titolo mancante');
+  if (!item.description?.trim()) baseErrors.push('descrizione mancante');
+  if (!item.price || item.price <= 0) baseErrors.push('prezzo non valido');
+  if (!item.category) baseErrors.push('categoria mancante');
+
+  // Campi specifici per categoria
+  const CATEGORIES_REQUIRE_TYPE = ['10', '11', '12', '16', '17', '20', '21', '38', '41'];
+  const MOTORI = ['2', '3', '4', '22', '34'];
+
+  if (item.category && CATEGORIES_REQUIRE_TYPE.includes(item.category) && !item.type?.trim()) {
+    baseErrors.push('tipologia mancante (campo obbligatorio per questa categoria)');
   }
-  if (!item.description?.trim()) {
-    webContents.send('log', 'ERROR: descrizione mancante, inserimento annullato');
-    await puppeteerBrowser.close();
-    callback();
-    return;
+  if (item.category === '16' && !item.clothingGender?.trim()) {
+    baseErrors.push('genere mancante (obbligatorio per Abbigliamento)');
   }
-  if (!item.price || item.price <= 0) {
-    webContents.send('log', 'ERROR: prezzo non valido, inserimento annullato');
+  if (item.category === '17' && !item.childrenAge?.trim()) {
+    baseErrors.push("fascia d'età mancante (obbligatoria per Tutto per i bambini)");
+  }
+  if (item.category && MOTORI.includes(item.category)) {
+    if (!item.brand?.trim() && item.category !== '4') baseErrors.push('marca mancante (obbligatoria per motori)');
+    if (!item.year?.trim()) baseErrors.push('anno mancante (obbligatorio per motori)');
+    if (!item.mileage?.trim()) baseErrors.push('chilometraggio mancante (obbligatorio per motori)');
+  }
+  if (!item.condition && !MOTORI.includes(item.category)) {
+    baseErrors.push('condizione mancante');
+  }
+
+  if (baseErrors.length > 0) {
+    log(webContents, `ERROR: inserimento annullato — ${baseErrors.join(', ')}`);
     await puppeteerBrowser.close();
     callback();
     return;
@@ -165,12 +183,12 @@ const doInsertItem = async (
   await blockCookieBanner(puppeteerPage);
   // Load a URL or website
   await puppeteerPage.goto(`https://inserimento.subito.it/?category=${item.category}&from=vendere`);
-  webContents.send('log', 'Opened page');
+  log(webContents, 'Opened page');
 
   // --- RILEVAMENTO COOKIE SCADUTI ---
   const currentUrl = puppeteerPage.url();
   if (currentUrl.includes('/login') || currentUrl.includes('/account') || currentUrl.includes('accedi')) {
-    webContents.send('log', 'ERROR: cookie scaduti — effettua nuovamente il login dalle Impostazioni');
+    log(webContents, 'ERROR: cookie scaduti — effettua nuovamente il login dalle Impostazioni');
     await saveErrorScreenshot(puppeteerPage, 'cookie_scaduti');
     await puppeteerBrowser.close();
     callback();
@@ -211,14 +229,14 @@ const doInsertItem = async (
   }
 
   await title?.type(item.title);
-  webContents.send('log', 'set title');
+  log(webContents, 'set title');
   await delay(ACTION_TIMEOUT);
 
-  webContents.send('log', 'set pics');
+  log(webContents, 'set pics');
   await delay(ACTION_TIMEOUT);
 
   await description?.type(item.description);
-  webContents.send('log', 'set description');
+  log(webContents, 'set description');
   await delay(ACTION_TIMEOUT);
 
   // --- CAMPI SPECIFICI PER CATEGORIA ---
@@ -246,11 +264,11 @@ const doInsertItem = async (
       );
       if (option) {
         await option.click();
-        webContents.send('log', `set ${label}: ${optionText}`);
+        log(webContents, `set ${label}: ${optionText}`);
       } else {
         // Chiudi il dropdown per non interferire con i campi successivi
         await puppeteerPage.keyboard.press('Escape');
-        webContents.send('log', `ERROR: option "${optionText}" not found for ${label}`);
+        log(webContents, `ERROR: option "${optionText}" not found for ${label}`);
       }
       await delay(ACTION_TIMEOUT);
     };
@@ -324,9 +342,9 @@ const doInsertItem = async (
       ).catch(() => null);
       if (brandOption) {
         await brandOption.click();
-        webContents.send('log', 'set brand');
+        log(webContents, 'set brand');
       } else {
-        webContents.send('log', 'ERROR: brand option not found');
+        log(webContents, 'ERROR: brand option not found');
       }
       await delay(ACTION_TIMEOUT);
     }
@@ -341,7 +359,7 @@ const doInsertItem = async (
         return `${el.id} (placeholder="${placeholder}" value="${value}")`;
       });
     });
-    webContents.send('log', `React-selects: ${allSelectInfo.join(' | ')}`);
+    log(webContents, `React-selects: ${allSelectInfo.join(' | ')}`);
 
     if (item.model) {
       // Trova il select del modello: cerca per placeholder che contiene "model" / "Modello"
@@ -360,7 +378,7 @@ const doInsertItem = async (
       });
 
       if (modelInput) {
-        webContents.send('log', `model select id: ${modelInput}`);
+        log(webContents, `model select id: ${modelInput}`);
         const input = await puppeteerPage.$(`#${modelInput}`);
         if (input) {
           await input.click();
@@ -372,14 +390,14 @@ const doInsertItem = async (
           ).catch(() => null);
           if (modelOption) {
             await modelOption.click();
-            webContents.send('log', 'set model');
+            log(webContents, 'set model');
           } else {
-            webContents.send('log', 'ERROR: model option not found');
+            log(webContents, 'ERROR: model option not found');
           }
           await delay(ACTION_TIMEOUT);
         }
       } else {
-        webContents.send('log', 'ERROR: model input not found');
+        log(webContents, 'ERROR: model input not found');
       }
     }
 
@@ -398,7 +416,7 @@ const doInsertItem = async (
       });
 
       if (trimInput) {
-        webContents.send('log', `trim select id: ${trimInput}`);
+        log(webContents, `trim select id: ${trimInput}`);
         const input = await puppeteerPage.$(`#${trimInput}`);
         if (input) {
           await input.click();
@@ -410,14 +428,14 @@ const doInsertItem = async (
           ).catch(() => null);
           if (trimOption) {
             await trimOption.click();
-            webContents.send('log', 'set trim');
+            log(webContents, 'set trim');
           } else {
-            webContents.send('log', 'WARNING: trim option not found');
+            log(webContents, 'WARNING: trim option not found');
           }
           await delay(ACTION_TIMEOUT);
         }
       } else {
-        webContents.send('log', 'WARNING: trim input not found');
+        log(webContents, 'WARNING: trim input not found');
       }
     }
     if (item.mileage) {
@@ -425,7 +443,7 @@ const doInsertItem = async (
       const mileageInput = await puppeteerPage.$('#mileage');
       await mileageInput?.click();
       await mileageInput?.type(item.mileage);
-      webContents.send('log', 'set mileage');
+      log(webContents, 'set mileage');
       await delay(ACTION_TIMEOUT);
     }
 
@@ -440,9 +458,9 @@ const doInsertItem = async (
       ).catch(() => null);
       if (yearOption) {
         await yearOption.click();
-        webContents.send('log', 'set year');
+        log(webContents, 'set year');
       } else {
-        webContents.send('log', 'ERROR: year option not found');
+        log(webContents, 'ERROR: year option not found');
       }
       await delay(ACTION_TIMEOUT);
     }
@@ -458,9 +476,9 @@ const doInsertItem = async (
       ).catch(() => null);
       if (monthOption) {
         await monthOption.click();
-        webContents.send('log', 'set month');
+        log(webContents, 'set month');
       } else {
-        webContents.send('log', 'ERROR: month option not found');
+        log(webContents, 'ERROR: month option not found');
       }
       await delay(ACTION_TIMEOUT);
     }
@@ -470,7 +488,7 @@ const doInsertItem = async (
   let locationSet = false;
   for (let attempt = 0; attempt < 2 && !locationSet; attempt++) {
     if (attempt > 0) {
-      webContents.send('log', 'WARNING: location retry...');
+      log(webContents, 'WARNING: location retry...');
       await delay(1500);
     }
     const locationInput = await puppeteerPage.$('#location');
@@ -490,22 +508,22 @@ const doInsertItem = async (
     ).catch(() => null);
     if (locationOption) {
       await locationOption.click();
-      webContents.send('log', 'set location (click)');
+      log(webContents, 'set location (click)');
       locationSet = true;
     } else {
       await puppeteerPage.keyboard.press('ArrowDown');
       await delay(300);
       await puppeteerPage.keyboard.press('Enter');
-      webContents.send('log', 'set location (keyboard)');
+      log(webContents, 'set location (keyboard)');
       locationSet = true;
     }
   }
-  if (!locationSet) webContents.send('log', 'WARNING: location non impostata');
+  if (!locationSet) log(webContents, 'WARNING: location non impostata');
   await delay(ACTION_TIMEOUT);
 
   // --- PRICE ---
   await price?.type(`${item.price}`);
-  webContents.send('log', 'set price');
+  log(webContents, 'set price');
   await delay(ACTION_TIMEOUT);
 
   // --- DIMENSION ---
@@ -520,13 +538,13 @@ const doInsertItem = async (
         radio.dispatchEvent(new Event('change', { bubbles: true }));
       }
     }, item.dimension);
-    webContents.send('log', 'set dimension');
+    log(webContents, 'set dimension');
     await delay(ACTION_TIMEOUT);
   }
 
   // --- PHONE ---
   phone?.type(mobilePhone);
-  webContents.send('log', 'set mobile phone');
+  log(webContents, 'set mobile phone');
   await delay(ACTION_TIMEOUT);
 
   // --- SUBMIT (step "Continua" — presente solo in alcuni flussi/categorie) ---
@@ -538,10 +556,10 @@ const doInsertItem = async (
   ).catch(() => null);
   if (submitButton) {
     await submitButton.click();
-    webContents.send('log', 'submit (step Continua)');
+    log(webContents, 'submit (step Continua)');
   } else {
     // Subito ora usa un form a pagina singola: nessuno step "Continua", si va diretti a Pubblica
-    webContents.send('log', 'nessuno step Continua, vado direttamente a Pubblica');
+    log(webContents, 'nessuno step Continua, vado direttamente a Pubblica');
   }
   await delay(ACTION_TIMEOUT * 3);
 
@@ -554,7 +572,7 @@ const doInsertItem = async (
     throw new Error('publish button not found');
   }
   await publishButton.click();
-  webContents.send('log', 'publish');
+  log(webContents, 'publish');
   // Segna come online subito dopo aver cliccato Pubblica
   const publishedItem = getItem(itemId);
   if (publishedItem) updateItem({ ...publishedItem, isOnline: true });
@@ -567,20 +585,20 @@ const doInsertItem = async (
       { timeout: 5000 }
     );
     await skipVisibilityButton?.click();
-    webContents.send('log', 'skip visibility');
+    log(webContents, 'skip visibility');
     await delay(ACTION_TIMEOUT);
   } catch {
-    webContents.send('log', 'no visibility upsell found, continuing');
+    log(webContents, 'no visibility upsell found, continuing');
   }
 
-  webContents.send('log', 'placement complete');
+  log(webContents, 'placement complete');
 
   } catch (err) {
     // --- SCREENSHOT ON ERROR ---
-    webContents.send('log', `ERROR: inserimento fallito — ${err}`);
+    log(webContents, `ERROR: inserimento fallito — ${err}`);
     try {
       await saveErrorScreenshot(puppeteerPage, `insert_${itemId}`);
-      webContents.send('log', `Screenshot salvato in AppData/sellbot/screenshots`);
+      log(webContents, `Screenshot salvato in AppData/sellbot/screenshots`);
     } catch { /* ignora errore screenshot */ }
   }
 
@@ -633,7 +651,7 @@ const doRemoveItemInternal = async (
     await blockCookieBanner(page);
     await page.goto('https://areariservata.subito.it/annunci', { waitUntil: 'domcontentloaded' });
     console.log(`[Remove] Cerco annuncio: ${item.title}`);
-    webContents.send('log', `Cerco annuncio: ${item.title}`);
+    log(webContents, `Cerco annuncio: ${item.title}`);
     await delay(3000); // Attendo rendering dinamico
 
     // Trova e clicca il bottone "Elimina" nel <li> che contiene il titolo dell'annuncio
@@ -661,15 +679,15 @@ const doRemoveItemInternal = async (
     }, item.title);
 
     console.log(`[Remove] JS click Elimina: ${jsClicked}`);
-    webContents.send('log', `Elimina: ${jsClicked}`);
+    log(webContents, `Elimina: ${jsClicked}`);
 
     if (jsClicked !== 'clicked') {
       console.log(`[Remove] ERROR: ${jsClicked}`);
-      webContents.send('log', `ERROR: ${jsClicked}`);
+      log(webContents, `ERROR: ${jsClicked}`);
       return false;
     }
     console.log('[Remove] Cliccato Elimina, attendo modal...');
-    webContents.send('log', 'Cliccato Elimina, attendo modal...');
+    log(webContents, 'Cliccato Elimina, attendo modal...');
     await delay(ACTION_TIMEOUT * 2);
 
     // Modal di conferma
@@ -681,7 +699,7 @@ const doRemoveItemInternal = async (
     console.log(`[Remove] modal trovato: ${!!modal}`);
 
     if (modal) {
-      webContents.send('log', 'Modal trovato');
+      log(webContents, 'Modal trovato');
 
       // Prima seleziona il motivo tramite puppeteer (click reale, non JS)
       const reasonBtn = await page.waitForSelector(
@@ -691,7 +709,7 @@ const doRemoveItemInternal = async (
       if (reasonBtn) {
         await reasonBtn.click();
         console.log('[Remove] Motivo selezionato via puppeteer click');
-        webContents.send('log', 'Motivo selezionato');
+        log(webContents, 'Motivo selezionato');
         await delay(500);
       }
 
@@ -706,19 +724,19 @@ const doRemoveItemInternal = async (
         await confirmBtn.click();
         await delay(ACTION_TIMEOUT * 2);
         console.log(`[Remove] "${item.title}" eliminato con successo`);
-        webContents.send('log', `"${item.title}" eliminato con successo`);
+        log(webContents, `"${item.title}" eliminato con successo`);
         updateItem({ ...item, isOnline: false });
       } else {
         console.log('[Remove] ERROR: bottone conferma Elimina non trovato');
-        webContents.send('log', 'ERROR: bottone conferma non trovato');
+        log(webContents, 'ERROR: bottone conferma non trovato');
       }
     } else {
       console.log('[Remove] WARNING: modal non apparso dopo click Elimina');
-      webContents.send('log', 'WARNING: modal non apparso dopo click Elimina');
+      log(webContents, 'WARNING: modal non apparso dopo click Elimina');
     }
   } catch (err) {
     console.error('[doRemoveItemInternal]', err);
-    webContents.send('log', `Errore eliminazione: ${err}`);
+    log(webContents, `Errore eliminazione: ${err}`);
   } finally {
     await browser.close();
   }
@@ -782,9 +800,9 @@ const checkItemsOnline = async (
     const bestScore = Math.max(...pageTitles.map((t) => jaccardSimilarity(item.title, t)), 0);
     if (bestScore >= MATCH_THRESHOLD) {
       stillOnline.push(itemId);
-      webContents.send('log', `Annuncio "${item.title}" ancora online (match ${(bestScore * 100).toFixed(0)}%)`);
+      log(webContents, `Annuncio "${item.title}" ancora online (match ${(bestScore * 100).toFixed(0)}%)`);
     } else {
-      webContents.send('log', `Annuncio "${item.title}" non trovato (offline, max match ${(bestScore * 100).toFixed(0)}%)`);
+      log(webContents, `Annuncio "${item.title}" non trovato (offline, max match ${(bestScore * 100).toFixed(0)}%)`);
     }
   }
 
@@ -817,7 +835,7 @@ const removeAndInsertItems = withRunningCheck(
     const { chromiumPath, mobilePhone, location } = appSettings;
 
     // Step 1: cancella tutti gli annunci, traccia quali erano online
-    webContents.send('log', '[Scheduler] Cancellazione annunci in corso...');
+    log(webContents, '[Scheduler] Cancellazione annunci in corso...');
     let anyDeleted = false;
     for (const itemId of itemIds) {
       const wasOnline = await doRemoveItemInternal(itemId, webContents, chromiumPath);
@@ -827,19 +845,19 @@ const removeAndInsertItems = withRunningCheck(
     // Step 2: se almeno uno era online, attendi 5 minuti per la propagazione
     if (anyDeleted) {
       const WAIT_AFTER_DELETE = 5 * 60 * 1000;
-      webContents.send('log', '[Scheduler] Attendo 5 minuti per la propagazione della cancellazione...');
+      log(webContents, '[Scheduler] Attendo 5 minuti per la propagazione della cancellazione...');
       await delay(WAIT_AFTER_DELETE);
     } else {
-      webContents.send('log', '[Scheduler] Nessun annuncio trovato online, procedo subito con la pubblicazione...');
+      log(webContents, '[Scheduler] Nessun annuncio trovato online, procedo subito con la pubblicazione...');
     }
 
     // Step 3: pubblica tutti gli annunci
-    webContents.send('log', '[Scheduler] Pubblicazione annunci...');
+    log(webContents, '[Scheduler] Pubblicazione annunci...');
     for (const itemId of itemIds) {
       await doInsertItem(itemId, webContents, chromiumPath, mobilePhone, location ?? '', () => {});
     }
 
-    webContents.send('log', '[Scheduler] Completato.');
+    log(webContents, '[Scheduler] Completato.');
     callback();
   }
 );
@@ -861,7 +879,7 @@ const fetchItemsStats = async (
 
   await blockCookieBanner(page);
   await page.goto('https://areariservata.subito.it/annunci', { waitUntil: 'domcontentloaded' });
-  webContents.send('log', 'Caricamento pagina annunci...');
+  log(webContents, 'Caricamento pagina annunci...');
   await delay(3000);
 
   // Scroll per caricare tutti gli annunci (lazy load)
@@ -909,7 +927,7 @@ const fetchItemsStats = async (
     return listings;
   });
 
-  webContents.send('log', `[Stats] Trovate ${allListings.length} listing — esempi: ${allListings.slice(0, 3).map(l => `"${l.title.substring(0, 30)}"`).join(', ')}`);
+  log(webContents, `[Stats] Trovate ${allListings.length} listing — esempi: ${allListings.slice(0, 3).map(l => `"${l.title.substring(0, 30)}"`).join(', ')}`);
 
   // Similarità Jaccard: conta parole in comune / parole totali uniche
   const jaccardSim = (a: string, b: string): number => {
@@ -935,9 +953,9 @@ const fetchItemsStats = async (
 
     if (bestListing && bestScore >= MATCH_THRESHOLD) {
       result[itemId] = { position: bestListing.position, views: bestListing.views, messages: bestListing.messages, lastChecked: now };
-      webContents.send('log', `Stats "${item.title}": pagina ${bestListing.position ?? '?'}, ${bestListing.views ?? 0} visite, ${bestListing.messages ?? 0} messaggi (match ${(bestScore * 100).toFixed(0)}%)`);
+      log(webContents, `Stats "${item.title}": pagina ${bestListing.position ?? '?'}, ${bestListing.views ?? 0} visite, ${bestListing.messages ?? 0} messaggi (match ${(bestScore * 100).toFixed(0)}%)`);
     } else {
-      webContents.send('log', `Stats "${item.title}": annuncio non trovato (max match ${(bestScore * 100).toFixed(0)}%)`);
+      log(webContents, `Stats "${item.title}": annuncio non trovato (max match ${(bestScore * 100).toFixed(0)}%)`);
     }
   }
 
