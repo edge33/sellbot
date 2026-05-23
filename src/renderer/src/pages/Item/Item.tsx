@@ -15,7 +15,7 @@ import {
   SIZE,
   COMPUTER_SCIENCE_TYPE
 } from './schema';
-import getOptionsForCategory from './getOptionsForCategory';
+import getOptionsForCategory, { getClothingGenderOptions, getChildrenAgeOptions } from './getOptionsForCategory';
 import { fetchCategoryConfig } from './subitoApi';
 import { AUTO_BRANDS, MOTO_BRANDS } from './carData';
 
@@ -221,11 +221,15 @@ const Item = () => {
     const newItem = { ...update } as Item;
     if (item.id) newItem.id = item.id;
 
-    const success = await window.updateItem({ ...update, id: item.id } as unknown as Item);
-    if (success) {
-      return navigate('/');
-    } else {
-      alert('Save failed, check logs');
+    try {
+      const success = await window.updateItem({ ...update, id: item.id } as unknown as Item);
+      if (success) {
+        return navigate('/');
+      } else {
+        alert('Salvataggio fallito: l\'app non è riuscita a scrivere il file. Verifica il percorso annunci nelle Impostazioni.');
+      }
+    } catch (err) {
+      alert(`Errore salvataggio: ${err}`);
     }
   };
 
@@ -612,9 +616,7 @@ const Item = () => {
                   {selectedCategory === CATEGORY.CLOTHING && (
                     <SelectInput ref={clothingGenderRef} label="Genere" name="clothingGender" defaultValue={item.clothingGender}>
                       <option value="" disabled>Seleziona un genere</option>
-                      <option value="1">Uomo</option>
-                      <option value="2">Donna</option>
-                      <option value="3">Unisex</option>
+                      {getClothingGenderOptions()}
                     </SelectInput>
                   )}
 
@@ -622,11 +624,7 @@ const Item = () => {
                   {selectedCategory === CATEGORY.CHILDREN && (
                     <SelectInput ref={childrenAgeRef} label="Fascia d'età" name="childrenAge" defaultValue={item.childrenAge}>
                       <option value="" disabled>Seleziona una fascia</option>
-                      <option value="1">0 - 12 mesi</option>
-                      <option value="2">1 - 3 anni</option>
-                      <option value="3">3 - 6 anni</option>
-                      <option value="4">6 - 12 anni</option>
-                      <option value="5">Per tutte le età</option>
+                      {getChildrenAgeOptions()}
                     </SelectInput>
                   )}
                 </>

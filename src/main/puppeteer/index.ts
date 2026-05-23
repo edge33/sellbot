@@ -40,6 +40,26 @@ const blockCookieBanner = async (page: Page): Promise<void> => {
   });
 };
 
+/**
+ * Apre browser e crea una page autenticata con cookies Subito + blocco banner.
+ * Usata da doRemoveItemInternal, checkItemsOnline, fetchItemsStats — quelle che
+ * non condividono lo stato globale puppeteerBrowser/puppeteerPage.
+ */
+const createAuthedPage = async (chromiumPath: string): Promise<{ browser: Browser; page: Page }> => {
+  const browser = await puppeteer.launch({
+    executablePath: chromiumPath,
+    defaultViewport: null,
+    headless: false
+  });
+  const page = await browser.newPage();
+  const cookies = getSettings()?.cookies ?? [];
+  for (const cookie of cookies) {
+    await page.setCookie(cookie);
+  }
+  await blockCookieBanner(page);
+  return { browser, page };
+};
+
 const ACTION_TIMEOUT = 1000;
 
 const delay = (timeout: number) =>
@@ -177,7 +197,7 @@ const doInsertItem = async (
 
   const cookies = getSettings().cookies;
   for (const cookie of cookies) {
-    puppeteerPage.setCookie(cookie);
+    await puppeteerPage.setCookie(cookie);
   }
 
   await blockCookieBanner(puppeteerPage);
@@ -228,14 +248,17 @@ const doInsertItem = async (
     }
   }
 
-  await title?.type(item.title);
+  // Normalizza: rimuove caratteri di controllo, normalizza newline a \n (puppeteer.type li gestisce come Enter)
+  const sanitize = (s: string): string => s.replace(/\r\n/g, '\n').replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '');
+
+  await title?.type(sanitize(item.title));
   log(webContents, 'set title');
   await delay(ACTION_TIMEOUT);
 
   log(webContents, 'set pics');
   await delay(ACTION_TIMEOUT);
 
-  await description?.type(item.description);
+  await description?.type(sanitize(item.description));
   log(webContents, 'set description');
   await delay(ACTION_TIMEOUT);
 
@@ -246,29 +269,40 @@ const doInsertItem = async (
     // --- CONDITION (solo per Informatica e simili) ---
 
     // Seleziona un'opzione di dropdown per testo visibile (usa contains per match parziale)
+    // Con retry singolo in caso il dropdown non si apra al primo tentativo.
     const clickDropdownByText = async (inputName: string, optionText: string, label: string) => {
-      const container = await puppeteerPage.$(
-        `::-p-xpath(//section[.//input[@name="${inputName}"]]//div[@tabindex="0"])`
-      ) || await puppeteerPage.$(
-        `::-p-xpath(//input[@name="${inputName}"]/parent::div/parent::div)`
-      );
-      if (container) {
-        await container.click();
-      }
-      await delay(ACTION_TIMEOUT);
-      // contains() invece di exact match: "Danneggiato" trova "Danneggiato - usato con parti guaste"
-      const option = await puppeteerPage.$(
-        `::-p-xpath(//ul[@role="listbox"]//li[contains(normalize-space(.), "${optionText}")])`
-      ) || await puppeteerPage.$(
-        `::-p-xpath(//div[@role="option"][contains(normalize-space(.), "${optionText}")])`
-      );
-      if (option) {
-        await option.click();
+      const tryOnce = async (): Promise<boolean> => {
+        const container = await puppeteerPage.$(
+          `::-p-xpath(//section[.//input[@name="${inputName}"]]//div[@tabindex="0"])`
+        ) || await puppeteerPage.$(
+          `::-p-xpath(//input[@name="${inputName}"]/parent::div/parent::div)`
+        );
+        if (container) await container.click();
+        await delay(ACTION_TIMEOUT);
+        const option = await puppeteerPage.$(
+          `::-p-xpath(//ul[@role="listbox"]//li[contains(normalize-space(.), "${optionText}")])`
+        ) || await puppeteerPage.$(
+          `::-p-xpath(//div[@role="option"][contains(normalize-space(.), "${optionText}")])`
+        );
+        if (option) {
+          await option.click();
+          return true;
+        }
+        // Chiudi il dropdown se rimasto aperto
+        await puppeteerPage.keyboard.press('Escape');
+        return false;
+      };
+
+      if (await tryOnce()) {
         log(webContents, `set ${label}: ${optionText}`);
       } else {
-        // Chiudi il dropdown per non interferire con i campi successivi
-        await puppeteerPage.keyboard.press('Escape');
-        log(webContents, `ERROR: option "${optionText}" not found for ${label}`);
+        // Retry: pausa più lunga + secondo tentativo
+        await delay(800);
+        if (await tryOnce()) {
+          log(webContents, `set ${label}: ${optionText} (al secondo tentativo)`);
+        } else {
+          log(webContents, `ERROR: option "${optionText}" not found for ${label}`);
+        }
       }
       await delay(ACTION_TIMEOUT);
     };
@@ -634,24 +668,11 @@ const doRemoveItemInternal = async (
     return false;
   }
 
-  const browser = await puppeteer.launch({
-    executablePath: chromiumPath,
-    defaultViewport: null,
-    headless: false
-  });
-
-  const page = await browser.newPage();
+  const { browser, page } = await createAuthedPage(chromiumPath);
 
   try {
-    const cookies = getSettings().cookies;
-    for (const cookie of cookies) {
-      page.setCookie(cookie);
-    }
-
-    await blockCookieBanner(page);
     await page.goto('https://areariservata.subito.it/annunci', { waitUntil: 'domcontentloaded' });
-    console.log(`[Remove] Cerco annuncio: ${item.title}`);
-    log(webContents, `Cerco annuncio: ${item.title}`);
+    log(webContents, `[Remove] Cerco annuncio: ${item.title}`);
     await delay(3000); // Attendo rendering dinamico
 
     // Trova e clicca il bottone "Elimina" nel <li> che contiene il titolo dell'annuncio
@@ -678,16 +699,13 @@ const doRemoveItemInternal = async (
       return 'li con titolo non trovato';
     }, item.title);
 
-    console.log(`[Remove] JS click Elimina: ${jsClicked}`);
-    log(webContents, `Elimina: ${jsClicked}`);
+    log(webContents, `[Remove] Elimina: ${jsClicked}`);
 
     if (jsClicked !== 'clicked') {
-      console.log(`[Remove] ERROR: ${jsClicked}`);
       log(webContents, `ERROR: ${jsClicked}`);
       return false;
     }
-    console.log('[Remove] Cliccato Elimina, attendo modal...');
-    log(webContents, 'Cliccato Elimina, attendo modal...');
+    log(webContents, '[Remove] Cliccato Elimina, attendo modal...');
     await delay(ACTION_TIMEOUT * 2);
 
     // Modal di conferma
@@ -696,11 +714,9 @@ const doRemoveItemInternal = async (
       { timeout: 8000 }
     ).catch(() => null);
 
-    console.log(`[Remove] modal trovato: ${!!modal}`);
+    log(webContents, `[Remove] modal trovato: ${!!modal}`);
 
     if (modal) {
-      log(webContents, 'Modal trovato');
-
       // Prima seleziona il motivo tramite puppeteer (click reale, non JS)
       const reasonBtn = await page.waitForSelector(
         '::-p-xpath(//label[contains(translate(., "ABCDEFGHIJKLMNOPQRSTUVWXYZ", "abcdefghijklmnopqrstuvwxyz"), "non venduto")])',
@@ -708,35 +724,30 @@ const doRemoveItemInternal = async (
       ).catch(() => null);
       if (reasonBtn) {
         await reasonBtn.click();
-        console.log('[Remove] Motivo selezionato via puppeteer click');
-        log(webContents, 'Motivo selezionato');
+        log(webContents, '[Remove] Motivo selezionato');
         await delay(500);
       }
 
       // Clicca il bottone Elimina del modal (l'ultimo visibile nella pagina)
       // Usa puppeteer .click() reale per triggerare gli eventi React
       const allEliminaBtns = await page.$$('::-p-xpath(//button[normalize-space(.)="Elimina"])');
-      console.log(`[Remove] Bottoni Elimina trovati: ${allEliminaBtns.length}`);
+      log(webContents, `[Remove] Bottoni Elimina trovati: ${allEliminaBtns.length}`);
       if (allEliminaBtns.length > 0) {
         const confirmBtn = allEliminaBtns[allEliminaBtns.length - 1];
         await confirmBtn.scrollIntoView();
         await delay(300);
         await confirmBtn.click();
         await delay(ACTION_TIMEOUT * 2);
-        console.log(`[Remove] "${item.title}" eliminato con successo`);
-        log(webContents, `"${item.title}" eliminato con successo`);
+        log(webContents, `[Remove] "${item.title}" eliminato con successo`);
         updateItem({ ...item, isOnline: false });
       } else {
-        console.log('[Remove] ERROR: bottone conferma Elimina non trovato');
-        log(webContents, 'ERROR: bottone conferma non trovato');
+        log(webContents, 'ERROR: bottone conferma Elimina non trovato');
       }
     } else {
-      console.log('[Remove] WARNING: modal non apparso dopo click Elimina');
       log(webContents, 'WARNING: modal non apparso dopo click Elimina');
     }
   } catch (err) {
-    console.error('[doRemoveItemInternal]', err);
-    log(webContents, `Errore eliminazione: ${err}`);
+    log(webContents, `[Remove] Errore eliminazione: ${err}`);
   } finally {
     await browser.close();
   }
@@ -750,19 +761,7 @@ const checkItemsOnline = async (
   webContents: WebContents,
   chromiumPath: string
 ): Promise<string[]> => {
-  const browser = await puppeteer.launch({
-    executablePath: chromiumPath,
-    defaultViewport: null,
-    headless: false
-  });
-
-  const page = await browser.newPage();
-  const cookies = getSettings().cookies;
-  for (const cookie of cookies) {
-    page.setCookie(cookie);
-  }
-
-  await blockCookieBanner(page);
+  const { browser, page } = await createAuthedPage(chromiumPath);
   await page.goto('https://areariservata.subito.it/annunci', { waitUntil: 'networkidle2' });
   await page.waitForSelector('::-p-xpath(//span[text()="Seleziona annunci"] | //div[contains(@class,"AdList")])', { timeout: 15000 }).catch(() => null);
 
@@ -809,12 +808,6 @@ const checkItemsOnline = async (
   await browser.close();
   return stillOnline;
 };
-// @ts-ignore
-const doRemoveItem = async (itemId, webContents, chromiumPath, callback) => {
-  await doRemoveItemInternal(itemId, webContents, chromiumPath);
-  callback();
-};
-
 const removeListings = withRunningCheck(
   async (callback: () => void, webContents: WebContents, itemIds: string[]) => {
     const appSettings = getAppSettings();
@@ -867,17 +860,7 @@ const fetchItemsStats = async (
   webContents: WebContents,
   chromiumPath: string
 ): Promise<Record<string, { position?: string; views?: number; messages?: number; lastChecked: string }>> => {
-  const browser = await puppeteer.launch({
-    executablePath: chromiumPath,
-    defaultViewport: null,
-    headless: false
-  });
-
-  const page = await browser.newPage();
-  const cookies = getSettings().cookies;
-  for (const cookie of cookies) page.setCookie(cookie);
-
-  await blockCookieBanner(page);
+  const { browser, page } = await createAuthedPage(chromiumPath);
   await page.goto('https://areariservata.subito.it/annunci', { waitUntil: 'domcontentloaded' });
   log(webContents, 'Caricamento pagina annunci...');
   await delay(3000);

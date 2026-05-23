@@ -120,4 +120,24 @@ const getOptionsForCategory = (category: CATEGORY) => {
   }
 };
 
+/** Opzioni per il dropdown "Genere" della categoria Abbigliamento (16) */
+export const getClothingGenderOptions = () => (
+  <>
+    <option value="1">Uomo</option>
+    <option value="2">Donna</option>
+    <option value="3">Unisex</option>
+  </>
+);
+
+/** Opzioni per il dropdown "Fascia d'età" della categoria Tutto per i bambini (17) */
+export const getChildrenAgeOptions = () => (
+  <>
+    <option value="1">0 - 12 mesi</option>
+    <option value="2">1 - 3 anni</option>
+    <option value="3">3 - 6 anni</option>
+    <option value="4">6 - 12 anni</option>
+    <option value="5">Per tutte le età</option>
+  </>
+);
+
 export default getOptionsForCategory;

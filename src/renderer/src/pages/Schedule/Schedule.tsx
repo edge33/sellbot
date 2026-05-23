@@ -41,6 +41,16 @@ const SchedulePage = () => {
     if (scheduleType === 'once' && !scheduledAt) { alert('Inserisci data e ora'); return; }
     if (scheduleType === 'recurring' && !startAt) { alert('Inserisci la prima esecuzione'); return; }
 
+    // Validazione finestra Subito: min +10 minuti, max +75 giorni
+    const dateToCheck = scheduleType === 'once' ? scheduledAt : scheduleType === 'recurring' ? startAt : null;
+    if (dateToCheck) {
+      const target = new Date(dateToCheck).getTime();
+      const minTime = Date.now() + 10 * 60 * 1000;
+      const maxTime = Date.now() + 75 * 24 * 3600 * 1000;
+      if (target < minTime) { alert('La data deve essere almeno 10 minuti nel futuro (vincolo Subito)'); return; }
+      if (target > maxTime) { alert('La data non può essere oltre 75 giorni nel futuro (vincolo Subito)'); return; }
+    }
+
     const now = new Date();
     const schedule: Schedule = {
       id: uuidv4(),
