@@ -21,7 +21,6 @@ import { writeFileSync } from 'fs';
 import { v4 as uuidv4 } from 'uuid';
 import path from 'path';
 import { log } from '../logger';
-import * as cheerio from 'cheerio';
 
 const IPC_CHANNELS = {
   EXPORT_ITEMS: 'EXPORT_ITEMS',
@@ -180,27 +179,22 @@ const searchDuckDuckGo = (query: string): Promise<string> => {
       response.on('end', () => {
         clearTimeout(timer);
         if (!body) { finish(''); return; }
-        try {
-          const $ = cheerio.load(body);
-          const snippets: string[] = [];
-          // Snippet dei risultati (descrizione)
-          $('.result__snippet').slice(0, 6).each((_, el) => {
-            const t = $(el).text().replace(/\s+/g, ' ').trim();
-            if (t.length > 20) snippets.push(t);
-          });
-          // Fallback: titoli dei risultati
-          if (snippets.length < 2) {
-            $('.result__a').slice(0, 8).each((_, el) => {
-              const t = $(el).text().replace(/\s+/g, ' ').trim();
-              if (t.length > 10) snippets.push(t);
-            });
-          }
-          console.log(`[DuckDuckGo] "${query}": ${snippets.length} snippet(s)`);
-          finish(snippets.join('\n\n'));
-        } catch (err) {
-          console.log('[DuckDuckGo] parse error:', err);
-          finish('');
+        const snippets: string[] = [];
+        const p1 = /class="result__snippet[^"]*"[^>]*>([\s\S]*?)<\/a>/g;
+        let m: RegExpExecArray | null;
+        while ((m = p1.exec(body)) !== null && snippets.length < 6) {
+          const t = m[1].replace(/<[^>]*>/g, '').replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/&#x27;/g, "'").replace(/\s+/g, ' ').trim();
+          if (t.length > 20) snippets.push(t);
         }
+        if (snippets.length < 2) {
+          const p2 = /class="result__a[^"]*"[^>]*>([\s\S]*?)<\/a>/g;
+          while ((m = p2.exec(body)) !== null && snippets.length < 8) {
+            const t = m[1].replace(/<[^>]*>/g, '').replace(/\s+/g, ' ').trim();
+            if (t.length > 10) snippets.push(t);
+          }
+        }
+        console.log(`[DuckDuckGo] "${query}": ${snippets.length} snippet(s)`);
+        finish(snippets.join('\n\n'));
       });
     });
     req.on('error', () => { clearTimeout(timer); finish(''); });
