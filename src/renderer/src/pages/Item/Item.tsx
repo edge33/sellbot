@@ -18,8 +18,10 @@ import {
 import getOptionsForCategory, { getClothingGenderOptions, getChildrenAgeOptions } from './getOptionsForCategory';
 import { fetchCategoryConfig } from './subitoApi';
 import { AUTO_BRANDS, MOTO_BRANDS } from './carData';
+import { MOTORI_CATEGORIES as SHARED_MOTORI } from '@shared/types';
 
-const MOTORI_CATEGORIES = ['2', '3', '4', '22', '34'];
+// Cast a readonly string[] perché TS rende il tuple troppo stretto per .includes(arbitraryString)
+const MOTORI_CATEGORIES: readonly string[] = SHARED_MOTORI;
 
 export async function loader({ params }) {
   const item = await window.getItem(params.item);

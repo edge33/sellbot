@@ -281,12 +281,20 @@ const ItemsTable = ({ items }: ItemsTableProps) => {
       </div>
       <div className="py-6 px-4 md:px-6 xl:px-7.5">
         {loadingOp && (
-          <div className="flex items-center gap-2 mb-4 text-sm text-white bg-meta-3 rounded-md px-4 py-2 w-fit">
+          <div className="flex items-center gap-3 mb-4 text-sm text-white bg-meta-3 rounded-md px-4 py-2 w-fit">
             <svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
               <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
               <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
             </svg>
-            {loadingOp}
+            <span>{loadingOp}</span>
+            <button
+              type="button"
+              onClick={() => window.cancelOperation()}
+              className="ml-2 text-xs underline hover:text-gray-200"
+              title="Interrompe l'operazione dopo l'item corrente"
+            >
+              Annulla
+            </button>
           </div>
         )}
         <div className="flex items-left items-center gap-7.5">

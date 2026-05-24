@@ -40,5 +40,7 @@ declare global {
     deleteSchedule: (id: string) => Promise<void>;
     updateSchedule: (schedule: Schedule) => Promise<void>;
     runScheduleNow: (id: string) => Promise<void>;
+    cancelOperation: () => Promise<void>;
+    isBusy: () => Promise<boolean>;
   }
 }

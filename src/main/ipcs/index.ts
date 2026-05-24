@@ -1,5 +1,5 @@
 import { BrowserWindow, ipcMain, shell, dialog, Notification } from 'electron';
-import { handleAuth, getAndStoreCookies, insertItems, removeListings, removeAndInsertItems, checkItemsOnline, fetchItemsStats } from '../puppeteer';
+import { handleAuth, getAndStoreCookies, insertItems, removeListings, removeAndInsertItems, checkItemsOnline, fetchItemsStats, requestCancel, isBusy } from '../puppeteer';
 import { getAppSettings, storeSettings, getSettings } from '../settings';
 import {
   getItems,
@@ -21,6 +21,7 @@ import { writeFileSync } from 'fs';
 import { v4 as uuidv4 } from 'uuid';
 import path from 'path';
 import { log } from '../logger';
+import * as cheerio from 'cheerio';
 
 const IPC_CHANNELS = {
   EXPORT_ITEMS: 'EXPORT_ITEMS',
@@ -55,6 +56,8 @@ const IPC_CHANNELS = {
   SEARCH_EAN_BY_TITLE: 'SEARCH_EAN_BY_TITLE',
   LOOKUP_EAN_PRODUCT: 'LOOKUP_EAN_PRODUCT',
   RUN_SCHEDULE_NOW: 'RUN_SCHEDULE_NOW',
+  CANCEL_OPERATION: 'CANCEL_OPERATION',
+  IS_BUSY: 'IS_BUSY',
 };
 
 export type ProductInfo = {
@@ -177,22 +180,27 @@ const searchDuckDuckGo = (query: string): Promise<string> => {
       response.on('end', () => {
         clearTimeout(timer);
         if (!body) { finish(''); return; }
-        const snippets: string[] = [];
-        const p1 = /class="result__snippet[^"]*"[^>]*>([\s\S]*?)<\/a>/g;
-        let m: RegExpExecArray | null;
-        while ((m = p1.exec(body)) !== null && snippets.length < 6) {
-          const t = m[1].replace(/<[^>]*>/g, '').replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/&#x27;/g, "'").replace(/\s+/g, ' ').trim();
-          if (t.length > 20) snippets.push(t);
-        }
-        if (snippets.length < 2) {
-          const p2 = /class="result__a[^"]*"[^>]*>([\s\S]*?)<\/a>/g;
-          while ((m = p2.exec(body)) !== null && snippets.length < 8) {
-            const t = m[1].replace(/<[^>]*>/g, '').replace(/\s+/g, ' ').trim();
-            if (t.length > 10) snippets.push(t);
+        try {
+          const $ = cheerio.load(body);
+          const snippets: string[] = [];
+          // Snippet dei risultati (descrizione)
+          $('.result__snippet').slice(0, 6).each((_, el) => {
+            const t = $(el).text().replace(/\s+/g, ' ').trim();
+            if (t.length > 20) snippets.push(t);
+          });
+          // Fallback: titoli dei risultati
+          if (snippets.length < 2) {
+            $('.result__a').slice(0, 8).each((_, el) => {
+              const t = $(el).text().replace(/\s+/g, ' ').trim();
+              if (t.length > 10) snippets.push(t);
+            });
           }
+          console.log(`[DuckDuckGo] "${query}": ${snippets.length} snippet(s)`);
+          finish(snippets.join('\n\n'));
+        } catch (err) {
+          console.log('[DuckDuckGo] parse error:', err);
+          finish('');
         }
-        console.log(`[DuckDuckGo] "${query}": ${snippets.length} snippet(s)`);
-        finish(snippets.join('\n\n'));
       });
     });
     req.on('error', () => { clearTimeout(timer); finish(''); });
@@ -488,6 +496,13 @@ const ipcs = (mainWindow: BrowserWindow) => {
   setInterval(runScheduler, 60 * 1000);
 
   ipcMain.handle(IPC_CHANNELS.OPEN_EXTERNAL, (_, url: string) => shell.openExternal(url));
+
+  ipcMain.handle(IPC_CHANNELS.CANCEL_OPERATION, () => {
+    requestCancel();
+    log(mainWindow.webContents, '[Cancel] Richiesta annullamento ricevuta');
+  });
+
+  ipcMain.handle(IPC_CHANNELS.IS_BUSY, () => isBusy());
 
   ipcMain.handle(IPC_CHANNELS.RUN_SCHEDULE_NOW, async (_, id: string) => {
     const schedules = getSchedules();

@@ -119,6 +119,12 @@ if (process.contextIsolated) {
     contextBridge.exposeInMainWorld('runScheduleNow', (id: string) =>
       ipcRenderer.invoke(IPC_CHANNELS.RUN_SCHEDULE_NOW, id)
     );
+    contextBridge.exposeInMainWorld('cancelOperation', () =>
+      ipcRenderer.invoke(IPC_CHANNELS.CANCEL_OPERATION)
+    );
+    contextBridge.exposeInMainWorld('isBusy', () =>
+      ipcRenderer.invoke(IPC_CHANNELS.IS_BUSY)
+    );
   } catch (error) {
     console.error(error);
   }

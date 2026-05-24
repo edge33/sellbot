@@ -7,6 +7,7 @@ import { writeFileSync, unlinkSync, mkdirSync, existsSync } from 'fs';
 import { tmpdir } from 'os';
 import path from 'path';
 import { log } from '../logger';
+import { MOTORI_CATEGORIES, CATEGORIES_REQUIRE_TYPE, CATEGORY_REQUIRES_CLOTHING_GENDER, CATEGORY_REQUIRES_CHILDREN_AGE } from '../../shared/types';
 
 // Salva uno screenshot nella cartella appData/sellbot/screenshots
 const saveErrorScreenshot = async (page: Page, label: string): Promise<void> => {
@@ -25,6 +26,14 @@ const saveErrorScreenshot = async (page: Page, label: string): Promise<void> => 
 let isRunning = false;
 let puppeteerBrowser: Browser;
 let puppeteerPage: Page;
+let cancelRequested = false;
+
+/** Richiede la cancellazione del batch in corso. Il batch interrompe al prossimo item. */
+export const requestCancel = (): void => {
+  cancelRequested = true;
+};
+export const isBusy = (): boolean => isRunning;
+const resetCancelFlag = (): void => { cancelRequested = false; };
 
 // Blocca il banner cookie di Subito (Didomi) intercettando le richieste di rete
 // Va chiamata PRIMA del goto, così lo script non viene mai caricato.
@@ -83,12 +92,14 @@ const withRunningCheck = <T extends unknown[]>(fn: (...params: T) => Promise<voi
       return;
     }
     isRunning = true;
+    resetCancelFlag();
     try {
       await fn(...params);
     } catch (err) {
       console.log('[withRunningCheck] errore:', err);
     } finally {
       isRunning = false;
+      resetCancelFlag();
     }
   };
 };
@@ -165,24 +176,21 @@ const doInsertItem = async (
   if (!item.category) baseErrors.push('categoria mancante');
 
   // Campi specifici per categoria
-  const CATEGORIES_REQUIRE_TYPE = ['10', '11', '12', '16', '17', '20', '21', '38', '41'];
-  const MOTORI = ['2', '3', '4', '22', '34'];
-
-  if (item.category && CATEGORIES_REQUIRE_TYPE.includes(item.category) && !item.type?.trim()) {
+  if (item.category && (CATEGORIES_REQUIRE_TYPE as readonly string[]).includes(item.category) && !item.type?.trim()) {
     baseErrors.push('tipologia mancante (campo obbligatorio per questa categoria)');
   }
-  if (item.category === '16' && !item.clothingGender?.trim()) {
+  if (item.category === CATEGORY_REQUIRES_CLOTHING_GENDER && !item.clothingGender?.trim()) {
     baseErrors.push('genere mancante (obbligatorio per Abbigliamento)');
   }
-  if (item.category === '17' && !item.childrenAge?.trim()) {
+  if (item.category === CATEGORY_REQUIRES_CHILDREN_AGE && !item.childrenAge?.trim()) {
     baseErrors.push("fascia d'età mancante (obbligatoria per Tutto per i bambini)");
   }
-  if (item.category && MOTORI.includes(item.category)) {
+  if (item.category && (MOTORI_CATEGORIES as readonly string[]).includes(item.category)) {
     if (!item.brand?.trim() && item.category !== '4') baseErrors.push('marca mancante (obbligatoria per motori)');
     if (!item.year?.trim()) baseErrors.push('anno mancante (obbligatorio per motori)');
     if (!item.mileage?.trim()) baseErrors.push('chilometraggio mancante (obbligatorio per motori)');
   }
-  if (!item.condition && !MOTORI.includes(item.category)) {
+  if (!item.condition && !(MOTORI_CATEGORIES as readonly string[]).includes(item.category)) {
     baseErrors.push('condizione mancante');
   }
 
@@ -259,7 +267,7 @@ const doInsertItem = async (
   await delay(ACTION_TIMEOUT);
 
   // --- CAMPI SPECIFICI PER CATEGORIA ---
-  const isMotori = ['2', '3', '4', '22', '34'].includes(item.category);
+  const isMotori = (MOTORI_CATEGORIES as readonly string[]).includes(item.category);
 
   if (!isMotori) {
     // --- CONDITION (solo per Informatica e simili) ---
@@ -651,21 +659,38 @@ const insertItems = withRunningCheck(
     if (!appSettings) return;
 
     const { chromiumPath, mobilePhone, location } = appSettings;
+    const total = itemIds.length;
+    let success = 0;
+    let failed = 0;
 
-    for (const itemId of itemIds) {
-      try {
-        await withTimeout(
-          doInsertItem(itemId, webContents, chromiumPath, mobilePhone, location ?? ''),
-          INSERT_TIMEOUT_MS,
-          `inserimento ${itemId}`
-        );
-      } catch (err) {
-        log(webContents, `ERROR: inserimento item ${itemId} fallito — ${err}`);
-        // Chiudi il browser in caso di timeout (potrebbe essere ancora aperto)
-        try { if (puppeteerBrowser) await puppeteerBrowser.close(); } catch { /* ignora */ }
-        // Continua col prossimo item del batch
+    for (let i = 0; i < itemIds.length; i++) {
+      if (cancelRequested) { log(webContents, '[Batch] Operazione annullata dall\'utente'); break; }
+      const itemId = itemIds[i];
+      log(webContents, `[Batch ${i + 1}/${total}] Inserimento item ${itemId}...`);
+      // Retry: 2 tentativi totali (1 originale + 1 retry)
+      let ok = false;
+      for (let attempt = 1; attempt <= 2; attempt++) {
+        if (cancelRequested) break;
+        try {
+          if (attempt > 1) {
+            log(webContents, `[Batch ${i + 1}/${total}] Retry tentativo ${attempt}...`);
+            await delay(3000);
+          }
+          await withTimeout(
+            doInsertItem(itemId, webContents, chromiumPath, mobilePhone, location ?? ''),
+            INSERT_TIMEOUT_MS,
+            `inserimento ${itemId}`
+          );
+          ok = true;
+          break;
+        } catch (err) {
+          log(webContents, `ERROR: inserimento item ${itemId} (tentativo ${attempt}) fallito — ${err}`);
+          try { if (puppeteerBrowser) await puppeteerBrowser.close(); } catch { /* ignora */ }
+        }
       }
+      if (ok) success++; else failed++;
     }
+    log(webContents, `[Batch] Completato: ${success} ok, ${failed} falliti su ${total} totali`);
   }
 );
 
@@ -825,7 +850,11 @@ const removeListings = withRunningCheck(
     const appSettings = getAppSettings();
     if (!appSettings) return;
     const { chromiumPath } = appSettings;
-    for (const itemId of itemIds) {
+    const total = itemIds.length;
+    for (let i = 0; i < itemIds.length; i++) {
+      if (cancelRequested) { log(webContents, '[Batch] Operazione annullata dall\'utente'); break; }
+      const itemId = itemIds[i];
+      log(webContents, `[Batch ${i + 1}/${total}] Rimozione item ${itemId}...`);
       try {
         await doRemoveItemInternal(itemId, webContents, chromiumPath);
       } catch (err) {

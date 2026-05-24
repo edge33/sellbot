@@ -82,4 +82,10 @@ type Schedule = {
   history?: { runAt: string; outcome: 'success' | 'error'; message?: string }[];
 };
 
+// Set di categorie usate sia in main che in renderer per evitare magic strings
+export const MOTORI_CATEGORIES = ['2', '3', '4', '22', '34'] as const;
+export const CATEGORIES_REQUIRE_TYPE = ['10', '11', '12', '16', '17', '20', '21', '38', '41'] as const;
+export const CATEGORY_REQUIRES_CLOTHING_GENDER = '16';
+export const CATEGORY_REQUIRES_CHILDREN_AGE = '17';
+
 export type { AppSettings, DescriptionSettings, Item, Schedule };
