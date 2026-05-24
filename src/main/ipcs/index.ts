@@ -15,7 +15,7 @@ import {
 } from '../items';
 import { AppSettings, Item, Schedule } from '../../shared/types';
 import { net } from 'electron';
-import { getSchedules, saveSchedules } from '../schedules';
+import { getSchedules, saveSchedules, getSchedulerState, saveSchedulerState } from '../schedules';
 import AdmZip from 'adm-zip';
 import { writeFileSync } from 'fs';
 import { v4 as uuidv4 } from 'uuid';
@@ -63,25 +63,55 @@ export type ProductInfo = {
   keySpecs: string[];
 };
 
-const callGroq = (apiKey: string, messages: { role: string; content: string }[], maxTokens = 512): Promise<string | null> => {
+// Helper: wrappa una net.request con timeout (default 30s)
+const HTTP_TIMEOUT_MS = 30000;
+
+const callGroqOnce = (
+  apiKey: string,
+  messages: { role: string; content: string }[],
+  maxTokens: number
+): Promise<{ status: number; body: string } | null> => {
   return new Promise((resolve) => {
     const body = JSON.stringify({ model: 'llama-3.3-70b-versatile', messages, max_tokens: maxTokens });
     const request = net.request({ method: 'POST', url: 'https://api.groq.com/openai/v1/chat/completions' });
     request.setHeader('Content-Type', 'application/json');
     request.setHeader('Authorization', `Bearer ${apiKey}`);
     let responseBody = '';
+    let status = 0;
+    let settled = false;
+    const finish = (r: { status: number; body: string } | null) => { if (!settled) { settled = true; resolve(r); } };
+    const timer = setTimeout(() => { try { request.abort(); } catch {} finish(null); }, HTTP_TIMEOUT_MS);
     request.on('response', (response) => {
+      status = response.statusCode;
       response.on('data', (chunk) => { responseBody += chunk.toString(); });
-      request.on('error', () => resolve(null));
-      response.on('end', () => {
-        try { resolve(JSON.parse(responseBody).choices?.[0]?.message?.content || null); }
-        catch { resolve(null); }
-      });
+      response.on('end', () => { clearTimeout(timer); finish({ status, body: responseBody }); });
     });
-    request.on('error', () => resolve(null));
+    request.on('error', () => { clearTimeout(timer); finish(null); });
     request.write(body);
     request.end();
   });
+};
+
+const callGroq = async (apiKey: string, messages: { role: string; content: string }[], maxTokens = 512): Promise<string | null> => {
+  // Retry su 429 (rate limit) e 5xx con backoff esponenziale: 1s, 3s, 7s
+  const backoffs = [0, 1000, 3000, 7000];
+  for (let i = 0; i < backoffs.length; i++) {
+    if (backoffs[i] > 0) await new Promise((r) => setTimeout(r, backoffs[i]));
+    const res = await callGroqOnce(apiKey, messages, maxTokens);
+    if (!res) continue; // timeout / errore di rete → retry
+    if (res.status >= 200 && res.status < 300) {
+      try { return JSON.parse(res.body).choices?.[0]?.message?.content || null; }
+      catch { return null; }
+    }
+    if (res.status === 429 || res.status >= 500) {
+      console.log(`[callGroq] status ${res.status}, retry ${i + 1}/${backoffs.length}`);
+      continue; // retry
+    }
+    // 4xx (auth, bad request) — non retry
+    console.log(`[callGroq] errore ${res.status}: ${res.body.substring(0, 200)}`);
+    return null;
+  }
+  return null;
 };
 
 const searchSubitoAds = (cleanQuery: string, cookieHeader: string, limit = 10): Promise<any[]> => {
@@ -94,13 +124,17 @@ const searchSubitoAds = (cleanQuery: string, cookieHeader: string, limit = 10): 
     req.setHeader('Referer', 'https://www.subito.it/');
     if (cookieHeader) req.setHeader('Cookie', cookieHeader);
     let body = '';
+    let settled = false;
+    const finish = (r: any[]) => { if (!settled) { settled = true; resolve(r); } };
+    const timer = setTimeout(() => { try { req.abort(); } catch {} finish([]); }, HTTP_TIMEOUT_MS);
     req.on('response', (response) => {
       response.on('data', (chunk) => { body += chunk.toString(); });
       response.on('end', () => {
-        try { resolve(JSON.parse(body)?.ads || []); } catch { resolve([]); }
+        clearTimeout(timer);
+        try { finish(JSON.parse(body)?.ads || []); } catch { finish([]); }
       });
     });
-    req.on('error', () => resolve([]));
+    req.on('error', () => { clearTimeout(timer); finish([]); });
     req.end();
   });
 };
@@ -135,19 +169,21 @@ const searchDuckDuckGo = (query: string): Promise<string> => {
     req.setHeader('Accept', 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8');
     req.setHeader('Accept-Language', 'it-IT,it;q=0.9,en;q=0.8');
     let body = '';
+    let settled = false;
+    const finish = (r: string) => { if (!settled) { settled = true; resolve(r); } };
+    const timer = setTimeout(() => { try { req.abort(); } catch {} finish(''); }, HTTP_TIMEOUT_MS);
     req.on('response', (response) => {
       response.on('data', (chunk) => { body += chunk.toString(); });
       response.on('end', () => {
-        if (!body) { resolve(''); return; }
+        clearTimeout(timer);
+        if (!body) { finish(''); return; }
         const snippets: string[] = [];
-        // Estrai snippets dai risultati DuckDuckGo
         const p1 = /class="result__snippet[^"]*"[^>]*>([\s\S]*?)<\/a>/g;
         let m: RegExpExecArray | null;
         while ((m = p1.exec(body)) !== null && snippets.length < 6) {
           const t = m[1].replace(/<[^>]*>/g, '').replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/&#x27;/g, "'").replace(/\s+/g, ' ').trim();
           if (t.length > 20) snippets.push(t);
         }
-        // Fallback: estrai titoli dei risultati
         if (snippets.length < 2) {
           const p2 = /class="result__a[^"]*"[^>]*>([\s\S]*?)<\/a>/g;
           while ((m = p2.exec(body)) !== null && snippets.length < 8) {
@@ -156,10 +192,10 @@ const searchDuckDuckGo = (query: string): Promise<string> => {
           }
         }
         console.log(`[DuckDuckGo] "${query}": ${snippets.length} snippet(s)`);
-        resolve(snippets.join('\n\n'));
+        finish(snippets.join('\n\n'));
       });
     });
-    req.on('error', () => resolve(''));
+    req.on('error', () => { clearTimeout(timer); finish(''); });
     req.end();
   });
 };
@@ -331,9 +367,28 @@ const ipcs = (mainWindow: BrowserWindow) => {
   });
 
   // Scheduler: controlla ogni minuto
-  let lastStatsRefresh: Date | null = null;
+  // lastStatsRefresh persistito su disco (sopravvive al riavvio dell'app)
+  let lastStatsRefresh: Date | null = (() => {
+    const s = getSchedulerState();
+    return s.lastStatsRefresh ? new Date(s.lastStatsRefresh) : null;
+  })();
+  // Anti-overlap: previene che due tick del scheduler partano in parallelo se
+  // un tick precedente impiega > 60s (es. un'auto-ripubblicazione lunga)
+  let schedulerRunning = false;
 
   const runScheduler = async () => {
+    if (schedulerRunning) return;
+    schedulerRunning = true;
+    try {
+      await runSchedulerInner();
+    } catch (err) {
+      console.error('[Scheduler] errore non gestito:', err);
+    } finally {
+      schedulerRunning = false;
+    }
+  };
+
+  const runSchedulerInner = async () => {
     const schedules = getSchedules();
     const appSettings = getAppSettings();
     const now = new Date();
@@ -359,6 +414,7 @@ const ipcs = (mainWindow: BrowserWindow) => {
               if (item) await updateItem({ ...item, stats });
             }
             lastStatsRefresh = now;
+            saveSchedulerState({ lastStatsRefresh: now.toISOString() });
             log(mainWindow.webContents, '[Stats] Aggiornamento completato');
 
             // --- Auto-ripubblica se posizione > soglia ---

@@ -27,16 +27,21 @@ let puppeteerBrowser: Browser;
 let puppeteerPage: Page;
 
 // Blocca il banner cookie di Subito (Didomi) intercettando le richieste di rete
-// Va chiamata PRIMA del goto, così lo script non viene mai caricato
+// Va chiamata PRIMA del goto, così lo script non viene mai caricato.
+// Il listener viene rimosso quando la page si chiude per evitare memory leak.
 const blockCookieBanner = async (page: Page): Promise<void> => {
   await page.setRequestInterception(true);
-  page.on('request', (req) => {
+  const handler = (req: any): void => {
     const url = req.url();
     if (url.includes('didomi.io') || url.includes('privacy-center.org') || url.includes('didomi')) {
       req.abort();
     } else {
       req.continue();
     }
+  };
+  page.on('request', handler);
+  page.once('close', () => {
+    try { page.off('request', handler); } catch { /* ignora */ }
   });
 };
 
@@ -630,6 +635,16 @@ const doInsertItem = async (
   await puppeteerBrowser.close();
 };
 
+// Helper: race una promise contro un timeout. Se scade, l'errore viene loggato
+// ma non blocca il resto del batch (lo gestisce il try/catch del chiamante).
+const withTimeout = <T>(promise: Promise<T>, ms: number, label: string): Promise<T> =>
+  Promise.race([
+    promise,
+    new Promise<T>((_, reject) => setTimeout(() => reject(new Error(`${label}: timeout dopo ${ms}ms`)), ms))
+  ]);
+
+const INSERT_TIMEOUT_MS = 5 * 60 * 1000; // 5 minuti per item
+
 const insertItems = withRunningCheck(
   async (webContents: WebContents, itemIds: string[]) => {
     const appSettings = getAppSettings();
@@ -639,9 +654,15 @@ const insertItems = withRunningCheck(
 
     for (const itemId of itemIds) {
       try {
-        await doInsertItem(itemId, webContents, chromiumPath, mobilePhone, location ?? '');
+        await withTimeout(
+          doInsertItem(itemId, webContents, chromiumPath, mobilePhone, location ?? ''),
+          INSERT_TIMEOUT_MS,
+          `inserimento ${itemId}`
+        );
       } catch (err) {
         log(webContents, `ERROR: inserimento item ${itemId} fallito — ${err}`);
+        // Chiudi il browser in caso di timeout (potrebbe essere ancora aperto)
+        try { if (puppeteerBrowser) await puppeteerBrowser.close(); } catch { /* ignora */ }
         // Continua col prossimo item del batch
       }
     }
