@@ -2,23 +2,28 @@ import { WebContents, app } from 'electron';
 import { appendFileSync, existsSync, mkdirSync, readdirSync, statSync, unlinkSync } from 'fs';
 import path from 'path';
 
-const LOG_DIR = path.join(app.getPath('userData'), 'logs');
 const MAX_LOG_FILES = 14; // mantiene gli ultimi 14 giorni
 
+// IMPORTANTE: LOG_DIR è lazy — `app.getPath` non funziona nel preload context
+// (preload importa transitivamente questo modulo via IPC_CHANNELS).
+const getLogDirPath = (): string => path.join(app.getPath('userData'), 'logs');
+
 const ensureLogDir = (): void => {
-  if (!existsSync(LOG_DIR)) mkdirSync(LOG_DIR, { recursive: true });
+  const dir = getLogDirPath();
+  if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
 };
 
 const getLogFilePath = (): string => {
   const today = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
-  return path.join(LOG_DIR, `${today}.log`);
+  return path.join(getLogDirPath(), `${today}.log`);
 };
 
 const rotateOldLogs = (): void => {
   try {
-    const files = readdirSync(LOG_DIR)
+    const dir = getLogDirPath();
+    const files = readdirSync(dir)
       .filter((f) => f.endsWith('.log'))
-      .map((f) => ({ name: f, path: path.join(LOG_DIR, f), mtime: statSync(path.join(LOG_DIR, f)).mtimeMs }))
+      .map((f) => ({ name: f, path: path.join(dir, f), mtime: statSync(path.join(dir, f)).mtimeMs }))
       .sort((a, b) => b.mtime - a.mtime);
     files.slice(MAX_LOG_FILES).forEach((f) => {
       try { unlinkSync(f.path); } catch { /* ignora */ }
@@ -54,4 +59,4 @@ export const log = (webContents: WebContents | null, message: string): void => {
 };
 
 /** Ritorna il percorso della cartella log per uso in altre parti dell'app */
-export const getLogDir = (): string => LOG_DIR;
+export const getLogDir = (): string => getLogDirPath();
