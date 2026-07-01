@@ -15,6 +15,7 @@ import { AppSettings } from '@shared/types';
 import Item, { loader as itemLoader } from './pages/Item/Item';
 import SchedulePage from './pages/Schedule/Schedule';
 import TrashPage from './pages/Trash/Trash';
+import ArchivePage from './pages/Archive/Archive';
 
 const isMissingConfig = (appSettings: AppSettings) => {
   if (!appSettings) {
@@ -74,6 +75,15 @@ function App() {
               <>
                 <PageTitle title="Cestino | Sellbot" />
                 <TrashPage />
+              </>
+            }
+          />
+          <Route
+            path="/archive"
+            element={
+              <>
+                <PageTitle title="Archivio | Sellbot" />
+                <ArchivePage />
               </>
             }
           />

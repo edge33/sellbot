@@ -23,7 +23,8 @@ const CATEGORY_NAMES: Record<string, string> = {
 const Products = () => {
   const itemsData = useLoaderData();
   const navigate = useNavigate();
-  const items = (itemsData ?? []) as Item[];
+  // Gli annunci archiviati (venduti) non compaiono nella dashboard principale
+  const items = ((itemsData ?? []) as Item[]).filter((i) => !i.archived);
 
   const [search, setSearch] = useState('');
   const [categoryFilter, setCategoryFilter] = useState<string>('');

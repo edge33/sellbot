@@ -9,12 +9,14 @@ type ActionButtonProps = {
   cloneItem: (itemId: string) => Promise<void>;
   deleteItem: (item: string) => Promise<void>;
   removeListing: (item: string) => Promise<void>;
+  archiveItem: (item: string) => Promise<void>;
   disabled?: boolean;
 };
 
 enum ACTION {
   REMOVE_LISTING = 'REMOVE_LISTING',
-  DELETE_FILE = 'DELETE_FILE'
+  DELETE_FILE = 'DELETE_FILE',
+  ARCHIVE = 'ARCHIVE'
 }
 
 const ActionButtons = ({
@@ -23,6 +25,7 @@ const ActionButtons = ({
   cloneItem,
   deleteItem,
   removeListing,
+  archiveItem,
   disabled
 }: ActionButtonProps) => {
   const [actionToPerform, setActionToPerform] = useState<ACTION>();
@@ -38,6 +41,10 @@ const ActionButtons = ({
       }
       case ACTION.REMOVE_LISTING: {
         removeListing(itemId);
+        break;
+      }
+      case ACTION.ARCHIVE: {
+        archiveItem(itemId);
         break;
       }
       default: {
@@ -145,6 +152,27 @@ const ActionButtons = ({
                 fill="none"
               >
                 <path d="M288 448H64V224h64v-64H64c-35.3 0-64 28.7-64 64v224c0 35.3 28.7 64 64 64h224c35.3 0 64-28.7 64-64v-64h-64v64zm-64-96h224c35.3 0 64-28.7 64-64V64c0-35.3-28.7-64-64-64H224c-35.3 0-64 28.7-64 64v224c0 35.3 28.7 64 64 64z"></path>
+              </svg>
+            </button>
+          </Tooltip>
+
+          <Tooltip text="Archivia (venduto)">
+            <button
+              className="hover:text-primary"
+              disabled={disabled}
+              onClick={() => {
+                setActionToPerform(ACTION.ARCHIVE);
+              }}
+            >
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                viewBox="0 0 512 512"
+                className="fill-current"
+                width="18"
+                height="18"
+                fill="none"
+              >
+                <path d="M32 96c0-17.7 14.3-32 32-32h384c17.7 0 32 14.3 32 32v64c0 17.7-14.3 32-32 32H64c-17.7 0-32-14.3-32-32V96zm32 128h384v192c0 35.3-28.7 64-64 64H128c-35.3 0-64-28.7-64-64V224zm120 48c-13.3 0-24 10.7-24 24s10.7 24 24 24h112c13.3 0 24-10.7 24-24s-10.7-24-24-24H184z"></path>
               </svg>
             </button>
           </Tooltip>

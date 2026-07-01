@@ -161,6 +161,24 @@ const updateItem = (item: Item): boolean => {
   }
 };
 
+const archiveItem = (itemId: string): boolean => {
+  const item = getItem(itemId);
+  if (!item || !item.filePath) return false;
+  const newItem = { ...item, archived: true, archivedAt: new Date().toISOString() };
+  writeFileSync(item.filePath, JSON.stringify(newItem));
+  invalidateItems();
+  return true;
+};
+
+const unarchiveItem = (itemId: string): boolean => {
+  const item = getItem(itemId);
+  if (!item || !item.filePath) return false;
+  const { archived: _a, archivedAt: _b, ...rest } = item;
+  writeFileSync(item.filePath, JSON.stringify(rest));
+  invalidateItems();
+  return true;
+};
+
 const cloneItem = (itemId: string): void => {
   const orig = getItem(itemId);
   if (!orig) return;
@@ -251,6 +269,8 @@ export {
   updateItem,
   cloneItem,
   deleteItem,
+  archiveItem,
+  unarchiveItem,
   getTrashItems,
   restoreItem,
   permanentlyDeleteItem,

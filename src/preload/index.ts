@@ -62,6 +62,12 @@ if (process.contextIsolated) {
     contextBridge.exposeInMainWorld('deleteItem', (itemId: string) =>
       ipcRenderer.invoke(IPC_CHANNELS.DELETE_ITEM, itemId)
     );
+    contextBridge.exposeInMainWorld('archiveItem', (itemId: string) =>
+      ipcRenderer.invoke(IPC_CHANNELS.ARCHIVE_ITEM, itemId)
+    );
+    contextBridge.exposeInMainWorld('unarchiveItem', (itemId: string) =>
+      ipcRenderer.invoke(IPC_CHANNELS.UNARCHIVE_ITEM, itemId)
+    );
     contextBridge.exposeInMainWorld('getCookies', () =>
       ipcRenderer.invoke(IPC_CHANNELS.GET_COOKIES)
     );

@@ -77,6 +77,11 @@ const ItemsTable = ({ items }: ItemsTableProps) => {
     return navigate(`/`);
   };
 
+  const handleArchiveItem = async (itemId: string) => {
+    await window.archiveItem(itemId);
+    revalidate();
+  };
+
   const handleRemoveListing = async (itemId: string) => {
     await withLoading('Rimozione annuncio...', async () => {
       await window.removeListings([itemId]);
@@ -272,6 +277,7 @@ const ItemsTable = ({ items }: ItemsTableProps) => {
                   insertItem={handleInsertItemClick}
                   deleteItem={handleDeleteItem}
                   removeListing={handleRemoveListing}
+                  archiveItem={handleArchiveItem}
                   disabled={!!loadingOp}
                 />
               </div>

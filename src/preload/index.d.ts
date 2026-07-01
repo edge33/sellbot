@@ -20,6 +20,8 @@ declare global {
     updateItem: (item: Item) => Promise<boolean>;
     cloneItem: (itemId: string) => Promise<void>;
     deleteItem: (itemId: string) => Promise<void>;
+    archiveItem: (itemId: string) => Promise<boolean>;
+    unarchiveItem: (itemId: string) => Promise<boolean>;
     getCookies: () => Promise<{ userId: string | null; cookies: any[] }>;
     getGeminiKey: () => Promise<string | null>;
     generateDescription: (prompt: string, systemMessage?: string) => Promise<string | null>;

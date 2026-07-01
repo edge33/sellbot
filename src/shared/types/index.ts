@@ -57,6 +57,8 @@ type Item = {
 
   isOnline?: boolean;
   deletedAt?: string; // presente solo negli item nel cestino
+  archived?: boolean; // annuncio venduto/archiviato, nascosto dalla dashboard
+  archivedAt?: string;
   stats?: {
     position?: string;   // es. "1°", "2°"
     views?: number;

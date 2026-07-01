@@ -68,7 +68,7 @@ const createAuthedPage = async (chromiumPath: string): Promise<{ browser: Browse
   const page = await browser.newPage();
   const cookies = getSettings()?.cookies ?? [];
   for (const cookie of cookies) {
-    await page.setCookie(cookie);
+    page.setCookie(cookie);
   }
   await blockCookieBanner(page);
   return { browser, page };
@@ -202,7 +202,7 @@ const doInsertItem = async (
 
   const cookies = getSettings().cookies;
   for (const cookie of cookies) {
-    await puppeteerPage.setCookie(cookie);
+    puppeteerPage.setCookie(cookie);
   }
 
   await blockCookieBanner(puppeteerPage);
@@ -524,39 +524,55 @@ const doInsertItem = async (
 
   // --- LOCATION (con retry) ---
   let locationSet = false;
-  for (let attempt = 0; attempt < 2 && !locationSet; attempt++) {
+  for (let attempt = 0; attempt < 3 && !locationSet; attempt++) {
     if (attempt > 0) {
-      log(webContents, 'WARNING: location retry...');
+      log(webContents, `WARNING: location retry ${attempt}...`);
       await delay(1500);
     }
     const locationInput = await puppeteerPage.$('#location');
     if (!locationInput) continue;
-    await locationInput.click();
-    await delay(300);
-    await puppeteerPage.keyboard.down('Control');
-    await puppeteerPage.keyboard.press('a');
-    await puppeteerPage.keyboard.up('Control');
+    // Triple-click per selezionare tutto il contenuto esistente, poi cancella
+    await locationInput.click({ clickCount: 3 });
+    await delay(200);
     await puppeteerPage.keyboard.press('Backspace');
     await delay(300);
-    await locationInput.type(location, { delay: 100 });
-    await delay(2500);
+    await locationInput.type(location, { delay: 120 });
+    // Attesa più lunga per autocomplete (Subito può essere lento)
+    await delay(3000);
     const locationOption = await puppeteerPage.waitForSelector(
-      '#autocomplete-location-item-0, [id^="autocomplete-location-item"], [class*="autocomplete"] li:first-child',
-      { timeout: 5000 }
+      '#autocomplete-location-item-0, [id^="autocomplete-location-item"], [class*="autocomplete"] li:first-child, [role="listbox"] [role="option"]:first-child',
+      { timeout: 6000 }
     ).catch(() => null);
     if (locationOption) {
       await locationOption.click();
       log(webContents, 'set location (click)');
       locationSet = true;
     } else {
+      // Diagnostica: cosa c'è realmente nella pagina?
+      const diag = await puppeteerPage.evaluate(() => {
+        const inputVal = (document.querySelector('#location') as HTMLInputElement)?.value || '';
+        const listbox = document.querySelector('[role="listbox"], [class*="autocomplete" i], [class*="suggestion" i]');
+        const listboxHtml = listbox?.outerHTML.substring(0, 300) || 'NESSUNO';
+        return { inputVal, listboxHtml };
+      });
+      log(webContents, `[Location DIAG] input value="${diag.inputVal}"`);
+      log(webContents, `[Location DIAG] listbox: ${diag.listboxHtml}`);
+      // Fallback: prova keyboard
       await puppeteerPage.keyboard.press('ArrowDown');
-      await delay(300);
+      await delay(400);
       await puppeteerPage.keyboard.press('Enter');
-      log(webContents, 'set location (keyboard)');
-      locationSet = true;
+      // Verifica che l'autocomplete sia stato effettivamente accettato
+      await delay(500);
+      const finalVal = await puppeteerPage.evaluate(() => (document.querySelector('#location') as HTMLInputElement)?.value || '');
+      if (finalVal.toLowerCase().includes(location.toLowerCase())) {
+        log(webContents, `set location (keyboard) — final="${finalVal}"`);
+        locationSet = true;
+      } else {
+        log(webContents, `WARNING: keyboard fallback fallito (final="${finalVal}"), retry`);
+      }
     }
   }
-  if (!locationSet) log(webContents, 'WARNING: location non impostata');
+  if (!locationSet) log(webContents, 'ERROR: location NON impostata dopo 3 tentativi');
   await delay(ACTION_TIMEOUT);
 
   // --- PRICE ---
@@ -712,33 +728,148 @@ const doRemoveItemInternal = async (
     log(webContents, `[Remove] Cerco annuncio: ${item.title}`);
     await delay(3000); // Attendo rendering dinamico
 
-    // Trova e clicca il bottone "Elimina" nel <li> che contiene il titolo dell'annuncio
-    // Usa i primi 40 caratteri del titolo per evitare problemi di troncamento
-    const jsClicked = await page.evaluate((title) => {
-      const shortTitle = title.substring(0, 40);
-      const listItems = document.querySelectorAll('li');
-      for (const li of listItems) {
-        const hasTitle = Array.from(li.querySelectorAll('h2, h3, button, span')).some(
-          (el) => el.childElementCount === 0 && el.textContent?.includes(shortTitle)
+    // Scroll per caricare tutti gli annunci (lazy load) — come fa fetchItemsStats
+    let prevHeight = 0;
+    for (let i = 0; i < 20; i++) {
+      const currHeight: number = await page.evaluate(() => document.body.scrollHeight);
+      if (currHeight === prevHeight) break;
+      prevHeight = currHeight;
+      await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
+      await delay(1200);
+    }
+
+    // Flusso "Seleziona annunci": attiva la modalità selezione (appaiono le checkbox),
+    // spunta la checkbox dell'annuncio target, poi clicca "Elimina" (in alto a destra).
+    let jsClicked = 'non tentato';
+
+    // Step 1: click reale su "Seleziona annunci" per attivare la modalità selezione
+    const selectModeMarked = await page.evaluate(() => {
+      const btns = Array.from(document.querySelectorAll('button'));
+      const selBtn = btns.find((b) => b.textContent?.trim() === 'Seleziona annunci');
+      if (selBtn) {
+        selBtn.setAttribute('data-sellbot-selectmode', '1');
+        return true;
+      }
+      return false;
+    });
+
+    if (!selectModeMarked) {
+      jsClicked = 'bottone "Seleziona annunci" non trovato';
+    } else {
+      const selectModeBtn = await page.$('[data-sellbot-selectmode="1"]');
+      if (selectModeBtn) {
+        await selectModeBtn.click();
+        await delay(800);
+      }
+
+      // Step 2: trova l'h2 del titolo, risali fino alla checkbox più vicina e marcala
+      const checkboxMarked = await page.evaluate((title) => {
+        const shortTitle = title.substring(0, 40);
+        const titleHeaders = Array.from(document.querySelectorAll('h2, h3'));
+        const matchingHeader = titleHeaders.find(
+          (h) => h.childElementCount === 0 && h.textContent?.includes(shortTitle)
         );
-        if (hasTitle) {
-          const buttons = li.querySelectorAll('button');
-          for (const btn of buttons) {
-            if (btn.textContent?.trim() === 'Elimina') {
-              (btn as HTMLElement).scrollIntoView();
-              btn.click();
-              return 'clicked';
-            }
+        if (!matchingHeader) return 'titolo non trovato in h2/h3';
+
+        let container: HTMLElement | null = matchingHeader as HTMLElement;
+        for (let i = 0; i < 10 && container; i++) {
+          const checkbox = container.querySelector('input[type="checkbox"], [role="checkbox"]');
+          if (checkbox) {
+            checkbox.setAttribute('data-sellbot-checkbox', '1');
+            (checkbox as HTMLElement).scrollIntoView({ block: 'center' });
+            return 'marked';
           }
-          return 'li trovato ma Elimina non trovato';
+          container = container.parentElement;
+        }
+        return 'h2 trovato ma nessuna checkbox trovata risalendo';
+      }, item.title);
+
+      if (checkboxMarked !== 'marked') {
+        jsClicked = checkboxMarked;
+      } else {
+        const checkboxEl = await page.$('[data-sellbot-checkbox="1"]');
+        if (!checkboxEl) {
+          jsClicked = 'marker checkbox perso dopo evaluate';
+        } else {
+          await delay(300);
+          await checkboxEl.click();
+          await delay(500);
+
+          // Step 3: cerca il bottone "Elimina" (in alto, con conteggio selezionati) e cliccalo
+          const deleteMarked = await page.evaluate(() => {
+            const els = Array.from(document.querySelectorAll('button, a, [role="button"]'));
+            const elim = els.find((el) => /^Elimina\b/.test((el.textContent || '').trim()));
+            if (elim) {
+              elim.setAttribute('data-sellbot-delete', '1');
+              return true;
+            }
+            return false;
+          });
+          if (deleteMarked) {
+            const delBtn = await page.$('[data-sellbot-delete="1"]');
+            if (delBtn) {
+              await delay(200);
+              await delBtn.click();
+              jsClicked = 'clicked';
+            } else {
+              jsClicked = 'marker Elimina perso dopo evaluate';
+            }
+          } else {
+            jsClicked = 'checkbox selezionata ma bottone Elimina non trovato';
+          }
         }
       }
-      return 'li con titolo non trovato';
-    }, item.title);
+    }
 
     log(webContents, `[Remove] Elimina: ${jsClicked}`);
 
     if (jsClicked !== 'clicked') {
+      // DIAGNOSTICA DEFINITIVA: dumpa TUTTI i controlli attorno al titolo
+      const diag = await page.evaluate((title: string) => {
+        const short = title.substring(0, 40);
+        const titleHeaders = Array.from(document.querySelectorAll('h2, h3'));
+        const header = titleHeaders.find((h) => h.childElementCount === 0 && h.textContent?.includes(short));
+        if (!header) return { headerFound: false, controls: [] as string[] };
+
+        // Risali e raccogli TUTTI i controlli (button, a, [role=button], elementi con onclick/svg)
+        const controls: string[] = [];
+        let container: HTMLElement | null = header as HTMLElement;
+        for (let lvl = 0; lvl < 8 && container; lvl++) {
+          const ctrls = container.querySelectorAll('button, a, [role="button"], [role="menuitem"]');
+          ctrls.forEach((c) => {
+            const text = (c.textContent || '').trim().substring(0, 25);
+            const aria = c.getAttribute('aria-label') || '';
+            const titleAttr = c.getAttribute('title') || '';
+            const hasSvg = c.querySelector('svg') ? 'svg' : '';
+            const cls = (c.className || '').toString().substring(0, 40);
+            controls.push(`L${lvl} <${c.tagName}> text="${text}" aria="${aria}" title="${titleAttr}" ${hasSvg} cls="${cls}"`);
+          });
+          if (controls.length > 0 && lvl >= 3) break; // basta risalire un po'
+          container = container.parentElement;
+        }
+        return { headerFound: true, controls: controls.slice(0, 15) };
+      }, item.title);
+      log(webContents, `[Remove DIAG] header=${diag.headerFound}, ${diag.controls.length} controlli trovati:`);
+      for (const c of diag.controls) {
+        log(webContents, `[Remove DIAG] ${c}`);
+      }
+      // DIAG 2: tutti i bottoni/controlli unici della pagina + checkbox
+      const diag2 = await page.evaluate(() => {
+        const btnTexts = new Set<string>();
+        document.querySelectorAll('button, a[role="button"], [role="menuitem"]').forEach((b) => {
+          const t = (b.textContent || '').trim();
+          const aria = b.getAttribute('aria-label') || '';
+          if (t) btnTexts.add(`btn:"${t.substring(0, 30)}"`);
+          else if (aria) btnTexts.add(`aria:"${aria.substring(0, 30)}"`);
+        });
+        const checkboxes = document.querySelectorAll('input[type="checkbox"]').length;
+        const gestisci = Array.from(document.querySelectorAll('*')).filter(
+          (e) => e.children.length === 0 && /gestisci/i.test(e.textContent || '')
+        ).map((e) => `${e.tagName}:"${(e.textContent || '').trim().substring(0, 25)}"`).slice(0, 3);
+        return { btns: Array.from(btnTexts).slice(0, 25), checkboxes, gestisci };
+      });
+      log(webContents, `[Remove DIAG2] checkboxes=${diag2.checkboxes}, gestisci=[${diag2.gestisci.join(', ')}]`);
+      log(webContents, `[Remove DIAG2] bottoni pagina: ${diag2.btns.join(' | ')}`);
       log(webContents, `ERROR: ${jsClicked}`);
       return false;
     }
@@ -932,30 +1063,33 @@ const fetchItemsStats = async (
   // Raccogli TUTTE le listing dalla pagina in un'unica evaluate
   type ListingData = { title: string; position?: string; views?: number; messages?: number };
   const allListings: ListingData[] = await page.evaluate(() => {
-    const listings: { title: string; position?: string; views?: number; messages?: number }[] = [];
-    const listItems = document.querySelectorAll('li');
-    for (const li of listItems) {
-      // Cerca il titolo: prova prima h2/h3, poi p, a, span con testo abbastanza lungo
-      let title = '';
-      const candidates = Array.from(li.querySelectorAll('h2, h3, p, a, span'));
-      for (const el of candidates) {
-        if (el.childElementCount !== 0) continue;
-        const text = el.textContent?.trim() || '';
-        if (text.length > 5 && text.length < 200) { title = text; break; }
-      }
-      if (!title) continue;
+    const listings: ListingData[] = [];
+    // Subito ora rende i titoli in h2/h3 (es. class "info__title") FUORI da <li>.
+    // Partiamo dai titoli e risaliamo per trovare il container dell'annuncio.
+    const titleEls = document.querySelectorAll('h2, h3');
+    for (const titleEl of titleEls) {
+      if (titleEl.childElementCount !== 0) continue;
+      const title = (titleEl.textContent || '').trim();
+      if (!title || title.length < 5 || title.length > 200) continue;
 
+      // Risali fino a trovare un container con attributi [title] o bottoni
       let position: string | undefined;
       let views: number | undefined;
       let messages: number | undefined;
-      li.querySelectorAll('[title]').forEach((el) => {
-        const t = el.getAttribute('title') || '';
-        if (t.includes('pagina')) position = t.replace('pagina', '').trim();
-        else if (t.includes('visit')) views = parseInt(t) || 0;
-        else if (t.includes('messagg')) messages = parseInt(t) || 0;
-      });
-
-      // Includi la listing anche senza stats (annuncio recente senza dati ancora)
+      let container: HTMLElement | null = titleEl as HTMLElement;
+      for (let i = 0; i < 8 && container; i++) {
+        const titledEls = container.querySelectorAll('[title]');
+        if (titledEls.length > 0) {
+          titledEls.forEach((el) => {
+            const t = el.getAttribute('title') || '';
+            if (t.includes('pagina') && !position) position = t.replace('pagina', '').trim();
+            else if (t.includes('visit') && views === undefined) views = parseInt(t) || 0;
+            else if (t.includes('messagg') && messages === undefined) messages = parseInt(t) || 0;
+          });
+          if (position || views !== undefined || messages !== undefined) break;
+        }
+        container = container.parentElement;
+      }
       listings.push({ title, position, views, messages });
     }
     return listings;

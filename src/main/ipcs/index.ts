@@ -9,6 +9,8 @@ import {
   getItemsWithEncodedPics,
   cloneItem,
   deleteItem,
+  archiveItem,
+  unarchiveItem,
   getTrashItems,
   restoreItem,
   permanentlyDeleteItem
@@ -794,6 +796,8 @@ Solo JSON valido.`;
   ipcMain.handle(IPC_CHANNELS.UPDATE_ITEM, (_, item: Item) => updateItem(item));
   ipcMain.handle(IPC_CHANNELS.CLONE_ITEM, (_, itemId: string) => cloneItem(itemId));
   ipcMain.handle(IPC_CHANNELS.DELETE_ITEM, (_, itemId: string) => deleteItem(itemId));
+  ipcMain.handle(IPC_CHANNELS.ARCHIVE_ITEM, (_, itemId: string) => archiveItem(itemId));
+  ipcMain.handle(IPC_CHANNELS.UNARCHIVE_ITEM, (_, itemId: string) => unarchiveItem(itemId));
   ipcMain.handle(IPC_CHANNELS.GET_TRASH, () => getTrashItems());
   ipcMain.handle(IPC_CHANNELS.RESTORE_ITEM, (_, itemId: string) => restoreItem(itemId));
   ipcMain.handle(IPC_CHANNELS.PERMANENTLY_DELETE_ITEM, (_, itemId: string) => permanentlyDeleteItem(itemId));
